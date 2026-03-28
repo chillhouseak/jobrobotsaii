@@ -1,0 +1,326 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark Mode (Default) */
+body {
+  background-color: #0a0a0f;
+  color: #f0f0f5;
+}
+
+html.dark body {
+  background-color: #0a0a0f;
+  color: #f0f0f5;
+}
+
+/* Light Mode */
+html.light body {
+  background-color: #fafbfc;
+  color: #1a1a2e;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #12121a;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #f0f2f5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6366f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8b5cf6;
+}
+
+/* Glass card effect - Dark Mode */
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+html.dark .glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Glass card effect - Light Mode */
+html.light .glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+}
+
+html.dark .glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(99, 102, 241, 0.1);
+}
+
+html.light .glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient button */
+.gradient-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  transition: all 0.3s ease;
+}
+
+.gradient-btn:hover {
+  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #f472b6 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+}
+
+.gradient-btn:active {
+  transform: translateY(0);
+}
+
+/* Input styles - Dark Mode */
+.input-field {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  color: #f0f0f5;
+}
+
+html.dark .input-field {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .input-field:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .input-field::placeholder {
+  color: #6b6b7b;
+}
+
+/* Input styles - Light Mode */
+html.light .input-field {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1a1a2e;
+}
+
+html.light .input-field:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+html.light .input-field::placeholder {
+  color: #9ca3af;
+}
+
+/* Floating orbs */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.4;
+  animation: float 8s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.8), transparent);
+  top: -100px;
+  left: -100px;
+  animation-delay: 0s;
+}
+
+.orb-2 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.6), transparent);
+  bottom: -50px;
+  right: -50px;
+  animation-delay: -3s;
+}
+
+.orb-3 {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.4), transparent);
+  top: 50%;
+  left: 50%;
+  animation-delay: -5s;
+}
+
+html.light .orb {
+  opacity: 0.15;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+html.light .spinner {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: #6366f1;
+}
+
+/* Sidebar - Dark Mode */
+html.dark aside {
+  background: rgba(18, 18, 26, 0.98);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.light aside {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Header - Dark Mode */
+html.dark header {
+  background: rgba(10, 10, 15, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.light header {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Text colors - Light Mode */
+html.light .text-gray-300 {
+  color: #4b5563;
+}
+
+html.light .text-gray-400 {
+  color: #6b7280;
+}
+
+html.light .text-gray-500 {
+  color: #9ca3af;
+}
+
+html.light .text-white {
+  color: #1a1a2e;
+}
+
+/* Background colors - Light Mode */
+html.light .bg-space-900 {
+  background-color: #fafbfc;
+}
+
+html.light .bg-space-800 {
+  background-color: #ffffff;
+}
+
+html.light .bg-space-700 {
+  background-color: #f0f2f5;
+}
+
+html.light .bg-space-900\/80 {
+  background-color: rgba(250, 251, 252, 0.8);
+}
+
+html.light .bg-space-900\/50 {
+  background-color: rgba(250, 251, 252, 0.5);
+}
+
+html.light .bg-space-900\/95 {
+  background-color: rgba(250, 251, 252, 0.95);
+}
+
+/* Glass backgrounds - Light Mode */
+html.light .bg-glass {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+html.light .bg-white\/5 {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+html.light .bg-white\/10 {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* Border colors - Light Mode */
+html.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html.light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Animation glow for light mode */
+html.light .animate-glow {
+  animation: glow-light 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow-light {
+  0% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.1); }
+  100% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.2); }
+}
