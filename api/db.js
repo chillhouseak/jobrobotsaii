@@ -10,10 +10,13 @@ async function connectDB() {
   const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 
   if (!MONGODB_URI) {
-    throw new Error(
+    const err = new Error(
       'MONGO_URI environment variable is not set. ' +
       'Set it in Vercel Dashboard → Backend API Project → Settings → Environment Variables.'
     );
+    err.statusCode = 503;
+    err.code = 'MONGO_URI_MISSING';
+    throw err;
   }
 
   if (cached.conn) {
@@ -30,7 +33,10 @@ async function connectDB() {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
-    throw e;
+    const err = new Error('Database connection failed: ' + e.message);
+    err.statusCode = 503;
+    err.code = 'DB_CONNECTION_FAILED';
+    throw err;
   }
 
   return cached.conn;

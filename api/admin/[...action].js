@@ -34,18 +34,26 @@ const adminAuth = async (req) => {
 };
 
 export default async function handler(req, res) {
-  await connectDB();
-
-  const { method, query, body } = req;
-  const action = query.action;
-
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (method === 'OPTIONS') {
+  if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  try {
+    await connectDB();
+  } catch (dbError) {
+    console.error('DB Error:', dbError.message);
+    return res.status(dbError.statusCode || 500).json({
+      success: false,
+      message: dbError.message || 'Database unavailable'
+    });
+  }
+
+  const { method, query, body } = req;
+  const action = query.action;
 
   try {
     // Login
