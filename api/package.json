@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "vercel-build": "echo 'API ready'"
+    "vercel-build": "npm install"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
