@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import connectDB from '../db.js';
-import User from '../models/User.js';
+import User from '../../backend/models/User.js';
 
 // Generate JWT Token
 const generateToken = (userId) => {

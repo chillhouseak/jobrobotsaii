@@ -1,11 +1,5 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
-}
-
 let cached = global.mongoose;
 
 if (!cached) {
@@ -13,17 +7,22 @@ if (!cached) {
 }
 
 async function connectDB() {
+  const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+  if (!MONGODB_URI) {
+    throw new Error(
+      'MONGO_URI environment variable is not set. ' +
+      'Set it in Vercel Dashboard → Backend API Project → Settings → Environment Variables.'
+    );
+  }
+
   if (cached.conn) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    const opts = {
+    cached.promise = mongoose.connect(MONGODB_URI, {
       bufferCommands: false,
-    };
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
     });
   }
 

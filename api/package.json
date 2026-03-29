@@ -1,0 +1,15 @@
+{
+  "name": "jobrobots-ai-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vercel-build": "echo 'API ready'"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.4"
+  }
+}

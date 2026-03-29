@@ -1,6 +1,6 @@
 import connectDB from '../db.js';
-import User from '../models/User.js';
-import IPNTransaction from '../models/IPNTransaction.js';
+import User from '../../backend/models/User.js';
+import IPNTransaction from '../../backend/models/IPNTransaction.js';
 
 export default async function handler(req, res) {
   await connectDB();

@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import connectDB from '../db.js';
-import User from '../models/User.js';
-import Admin from '../models/Admin.js';
-import Webhook from '../models/Webhook.js';
+import User from '../../backend/models/User.js';
+import Admin from '../../backend/models/Admin.js';
+import Webhook from '../../backend/models/Webhook.js';
 
 const generateAdminToken = (admin) => {
   return jwt.sign(
