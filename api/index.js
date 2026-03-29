@@ -3,7 +3,7 @@ import adminHandler from './admin/[...action].js';
 import aiHandler from './ai/[action].js';
 import webhookHandler from './webhooks/[action].js';
 
-// CORS headers - allow all origins for API
+// CORS headers on every response
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -12,20 +12,19 @@ const setCorsHeaders = (res) => {
 };
 
 export default async function handler(req, res) {
-  const { url, method } = req;
-  const pathname = url.split('?')[0];
+  setCorsHeaders(res);
 
-  // Handle CORS preflight for ALL routes
-  if (method === 'OPTIONS') {
-    setCorsHeaders(res);
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  setCorsHeaders(res);
+  const { url } = req;
+  const pathname = url.split('?')[0];
 
   try {
     // Health check
-    if (pathname === '/' || pathname === '/api' || pathname === '/health') {
+    if (pathname === '/' || pathname === '/health' || pathname === '/api') {
       return res.status(200).json({
         success: true,
         message: 'JobRobots AI API is running',
@@ -54,14 +53,14 @@ export default async function handler(req, res) {
       return aiHandler(req, res);
     }
 
-    // Webhook routes: /api/webhooks/ipn, /api/webhooks/health, etc.
+    // Webhook routes: /api/webhooks/ipn, etc.
     if (pathname.startsWith('/api/webhooks/')) {
       const action = pathname.split('/api/webhooks/')[1];
       req.query = { action };
       return webhookHandler(req, res);
     }
 
-    // 404 for unknown routes
+    // Unknown route
     return res.status(404).json({
       success: false,
       message: `Route ${pathname} not found`
