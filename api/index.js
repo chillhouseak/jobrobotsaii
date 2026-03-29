@@ -23,36 +23,36 @@ export default async function handler(req, res) {
 
   setCorsHeaders(res);
 
-  // Auth routes: /api/auth/login, /api/auth/register, etc.
-  if (pathname.startsWith('/api/auth/')) {
-    const action = pathname.split('/api/auth/')[1];
+  // Auth routes: /auth/login, /auth/register
+  if (pathname.startsWith('/auth/')) {
+    const action = pathname.split('/auth/')[1];
     req.query = { action };
     return authHandler(req, res);
   }
 
-  // Admin routes: /api/admin/login, /api/admin/users, etc.
-  if (pathname.startsWith('/api/admin/')) {
-    const action = pathname.split('/api/admin/')[1];
+  // Admin routes: /admin/login, /admin/users
+  if (pathname.startsWith('/admin/')) {
+    const action = pathname.split('/admin/')[1];
     req.query = { action };
     return adminHandler(req, res);
   }
 
-  // AI routes: /api/ai/answer, /api/ai/status, etc.
-  if (pathname.startsWith('/api/ai/')) {
-    const action = pathname.split('/api/ai/')[1];
+  // AI routes: /ai/answer, /ai/status
+  if (pathname.startsWith('/ai/')) {
+    const action = pathname.split('/ai/')[1];
     req.query = { action };
     return aiHandler(req, res);
   }
 
-  // Webhook routes: /api/webhooks/ipn, /api/webhooks/health, etc.
-  if (pathname.startsWith('/api/webhooks/')) {
-    const action = pathname.split('/api/webhooks/')[1];
+  // Webhook routes: /webhooks/ipn, /webhooks/health
+  if (pathname.startsWith('/webhooks/')) {
+    const action = pathname.split('/webhooks/')[1];
     req.query = { action };
     return webhookHandler(req, res);
   }
 
   // Health check
-  if (pathname === '/api' || pathname === '/api/health') {
+  if (pathname === '/' || pathname === '/health') {
     return res.status(200).json({
       success: true,
       message: 'JobRobots AI API is running',

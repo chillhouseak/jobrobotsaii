@@ -1,4 +1,4 @@
-const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 class ApiService {
   getToken() {
@@ -129,7 +129,6 @@ class ApiService {
     return this.request('/ai/status');
   }
 
-
   async generateVoiceOver(text, voiceType, tone, speed) {
     return this.request('/ai/voice-over', {
       method: 'POST',
@@ -137,7 +136,6 @@ class ApiService {
     });
   }
 
-  // Interview Simulator Methods
   async generateInterviewQuestions(jobRole, interviewType) {
     return this.request('/ai/interview-questions', {
       method: 'POST',
@@ -152,7 +150,6 @@ class ApiService {
     });
   }
 
-  // Goal Tracker
   async generateGoalTracker(goal, targetDays, currentProgress) {
     return this.request('/ai/goal-tracker', {
       method: 'POST',
@@ -160,7 +157,6 @@ class ApiService {
     });
   }
 
-  // Resume Tailoring
   async tailorResume(resume, jobDescription, targetRole) {
     return this.request('/ai/tailor-resume', {
       method: 'POST',
