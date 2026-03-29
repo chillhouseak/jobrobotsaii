@@ -3,9 +3,25 @@ import adminHandler from './admin/[...action].js';
 import aiHandler from './ai/[action].js';
 import webhookHandler from './webhooks/[action].js';
 
+// CORS headers for all responses
+const setCorsHeaders = (res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+};
+
 export default async function handler(req, res) {
-  const { url } = req;
+  const { url, method } = req;
   const pathname = url.split('?')[0];
+
+  // Handle CORS preflight
+  if (method === 'OPTIONS') {
+    setCorsHeaders(res);
+    return res.status(200).end();
+  }
+
+  setCorsHeaders(res);
 
   // Auth routes: /api/auth/login, /api/auth/register, etc.
   if (pathname.startsWith('/api/auth/')) {
