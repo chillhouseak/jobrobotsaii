@@ -1,32 +1,9 @@
-// Use environment variable in production, fallback to relative path
-const getApiUrl = () => {
-  // Try to use the environment variable first
-  const envUrl = import.meta.env?.VITE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api';
 
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // In development, use relative path (no /api prefix)
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('vercel')) {
-    return '';
-  }
-
-  // In production, use same domain API (no /api prefix)
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-
-  return '';
-};
-
-const API_URL = getApiUrl();
+// Admin API calls go to: https://jobrobotsaii.vercel.app/api/admin/...
+// Final URL example: https://jobrobotsaii.vercel.app/api/admin/login
 
 class ApiService {
-  constructor() {
-    this.baseUrl = API_URL;
-  }
-
   getHeaders() {
     const token = localStorage.getItem('adminToken');
     return {
@@ -36,7 +13,9 @@ class ApiService {
   }
 
   async request(endpoint, options = {}) {
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log('Admin API Request:', options.method || 'GET', url);
+
     const config = {
       ...options,
       headers: {
@@ -59,7 +38,7 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error('API Error:', error);
+      console.error('Admin API Error:', error);
       throw error;
     }
   }

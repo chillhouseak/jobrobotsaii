@@ -1,4 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api';
+
+// Frontend API calls go to: https://jobrobotsaii.vercel.app/api/...
+// Final URL example: https://jobrobotsaii.vercel.app/api/auth/login
 
 class ApiService {
   getToken() {
@@ -26,7 +29,10 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log('API Request:', options.method || 'GET', url);
+
+    const response = await fetch(url, {
       ...options,
       headers,
     });
@@ -41,53 +47,28 @@ class ApiService {
   }
 
   async login(email, password) {
-    const data = await this.request('/auth/login', {
+    return this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-
-    if (data.success && data.data.token) {
-      this.setToken(data.data.token);
-      localStorage.setItem('jobrobots_user', JSON.stringify(data.data.user));
-    }
-
-    return data;
   }
 
   async register(name, email, password) {
-    const data = await this.request('/auth/register', {
+    return this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
     });
-
-    if (data.success && data.data.token) {
-      this.setToken(data.data.token);
-      localStorage.setItem('jobrobots_user', JSON.stringify(data.data.user));
-    }
-
-    return data;
   }
 
   async getMe() {
     return this.request('/auth/me');
   }
 
-  async updateProfile(profileData) {
-    return this.request('/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-  }
-
   async updateProfile(data) {
-    const result = await this.request('/auth/profile', {
+    return this.request('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
-    if (result.success && result.data.user) {
-      localStorage.setItem('jobrobots_user', JSON.stringify(result.data.user));
-    }
-    return result;
   }
 
   getUser() {
@@ -101,6 +82,7 @@ class ApiService {
 
   logout() {
     this.removeToken();
+    window.location.href = '/login';
   }
 
   // AI Methods
@@ -147,13 +129,6 @@ class ApiService {
     return this.request('/ai/analyze-answer', {
       method: 'POST',
       body: JSON.stringify({ question, answer, interviewType }),
-    });
-  }
-
-  async generateGoalTracker(goal, targetDays, currentProgress) {
-    return this.request('/ai/goal-tracker', {
-      method: 'POST',
-      body: JSON.stringify({ goal, targetDays, currentProgress }),
     });
   }
 
