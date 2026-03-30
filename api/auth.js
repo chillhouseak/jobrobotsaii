@@ -22,24 +22,14 @@ export const connectDB = async () => {
   await mongoose.connect(uri, { bufferCommands: false });
 };
 
-export const setCors = (req, res) => {
-  const allowedOrigins = [
-    'https://jobrobotsaii-qbjo.vercel.app',
-    'https://jobrobotsaii-6jrn.vercel.app',
-  ];
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// Extract action from URL path — Express strips /api/auth prefix
+const getAction = (req) => {
+  const url = req.url.split('?')[0]; // '/login' → 'login'
+  return url.replace(/^\//, '') || null;
 };
 
 export default async function handler(req, res) {
-  setCors(req, res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const { action } = req.query || {};
+  const action = getAction(req);
   const { method, body } = req;
 
   try {

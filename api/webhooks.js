@@ -8,17 +8,13 @@ export const connectDB = async () => {
   await mongoose.connect(uri, { bufferCommands: false });
 };
 
-export const setCors = (_req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+const getAction = (req) => {
+  const url = req.url.split('?')[0];
+  return url.replace(/^\//, '') || null;
 };
 
 export default async function handler(req, res) {
-  setCors(req, res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const { action } = req.query || {};
+  const action = getAction(req);
   const { method, body } = req;
 
   try {
