@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import User from '../backend/models/User.js';
+import User from './models/User.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const authMiddleware = async (req) => {

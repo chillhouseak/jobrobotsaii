@@ -4,43 +4,45 @@ import adminHandler from './admin.js';
 import aiHandler from './ai.js';
 import webhookHandler from './webhooks.js';
 
-// CORS with specific allowed origins
+const ALLOWED_ORIGINS = [
+  'https://jobrobotsaii-qbjo.vercel.app',
+  'https://jobrobotsaii-6jrn.vercel.app',
+];
+
 const setCorsHeaders = (req, res) => {
-  const allowedOrigins = [
-    'https://jobrobotsaii-qbjo.vercel.app',
-    'https://jobrobotsaii-6jrn.vercel.app',
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-
+  const origin = req.headers?.origin;
+  res.setHeader(
+    'Access-Control-Allow-Origin',
+    origin && ALLOWED_ORIGINS.includes(origin) ? origin : '*'
+  );
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 };
 
+// Extract action from pathname (handles both /api/admin/login and /admin/login)
+const getAction = (pathname) => {
+  const segments = pathname.split('/').filter(Boolean); // ['api', 'admin', 'login']
+  // Skip 'api' prefix if present, return next segment
+  const startIndex = segments[0] === 'api' ? 1 : 0;
+  return segments[startIndex + 1] || null; // ['admin', 'login'] → 'login'
+};
+
 export default async function handler(req, res) {
   const { url, method } = req;
-  let pathname = url.split('?')[0];
+  const pathname = url.split('?')[0];
+  const route = req.query?.route || '';
 
-  // Strip /api prefix (vercel routes /api/* → here)
-  if (pathname.startsWith('/api')) {
-    pathname = pathname.replace('/api', '') || '/';
-  }
-
-  // Handle preflight
+  // Handle preflight FIRST
   if (method === 'OPTIONS') {
     setCorsHeaders(req, res);
     return res.status(200).end();
   }
 
-  // Apply CORS
   setCorsHeaders(req, res);
 
   try {
     // Health check
-    if (pathname === '/' || pathname === '/health') {
+    if (route === 'health' || pathname === '/' || pathname === '/health') {
       return res.status(200).json({
         success: true,
         message: 'JobRobots AI API is running',
@@ -48,27 +50,27 @@ export default async function handler(req, res) {
       });
     }
 
-    // Auth routes: /auth/login, /auth/register, etc.
-    if (pathname.startsWith('/auth/')) {
-      req.query = { action: pathname.split('/auth/')[1] };
+    // Auth routes
+    if (route === 'auth' || pathname.startsWith('/auth/')) {
+      req.query = { action: getAction(pathname) };
       return await authHandler(req, res);
     }
 
-    // Admin routes: /admin/login, /admin/users, etc.
-    if (pathname.startsWith('/admin/')) {
-      req.query = { action: pathname.split('/admin/')[1] };
+    // Admin routes
+    if (route === 'admin' || pathname.startsWith('/admin/')) {
+      req.query = { action: getAction(pathname) };
       return await adminHandler(req, res);
     }
 
-    // AI routes: /ai/answer, /ai/status, etc.
-    if (pathname.startsWith('/ai/')) {
-      req.query = { action: pathname.split('/ai/')[1] };
+    // AI routes
+    if (route === 'ai' || pathname.startsWith('/ai/')) {
+      req.query = { action: getAction(pathname) };
       return await aiHandler(req, res);
     }
 
-    // Webhook routes: /webhooks/ipn, etc.
-    if (pathname.startsWith('/webhooks/')) {
-      req.query = { action: pathname.split('/webhooks/')[1] };
+    // Webhook routes
+    if (route === 'webhooks' || pathname.startsWith('/webhooks/')) {
+      req.query = { action: getAction(pathname) };
       return await webhookHandler(req, res);
     }
 

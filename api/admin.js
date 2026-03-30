@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import User from '../backend/models/User.js';
-import Admin from '../backend/models/Admin.js';
-import Webhook from '../backend/models/Webhook.js';
+import User from './models/User.js';
+import Admin from './models/Admin.js';
+import Webhook from './models/Webhook.js';
 
 export const adminAuth = async (req) => {
   const authHeader = req.headers.authorization;

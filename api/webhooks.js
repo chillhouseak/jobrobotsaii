@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import IPNTransaction from '../backend/models/IPNTransaction.js';
+import IPNTransaction from './models/IPNTransaction.js';
 
 export const connectDB = async () => {
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
