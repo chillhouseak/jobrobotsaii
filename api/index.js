@@ -7,11 +7,12 @@ import webhookHandler from './webhooks.js';
 
 const app = express();
 
-// CORS — allow both frontend domains
+// CORS — allow all frontend domains
 app.use(cors({
   origin: [
     'https://jobrobotsaii-qbjo.vercel.app',
     'https://jobrobotsaii-6jrn.vercel.app',
+    'https://jobrobotsaiiadminpanel.vercel.app',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
