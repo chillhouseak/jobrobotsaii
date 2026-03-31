@@ -1,5 +1,8 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  "framework": "vite",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "https://jobrobotsaii.vercel.app/api/$1" },
+    { "src": "/health", "dest": "https://jobrobotsaii.vercel.app/health" },
+    { "src": "/(.*)", "dest": "/dist/$1" }
   ]
 }
