@@ -37,19 +37,20 @@ app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'JobRobots AI API is running' });
 });
 
-// Redirect all non-API routes to frontend (preserve path + query string)
-const frontendUrl = process.env.FRONTEND_URL || 'https://jobrobotsaii-qbjo.vercel.app';
+// Catch-all: redirect to frontend via HTML meta refresh (preserves path + query)
 app.get('*', (req, res) => {
-  // Skip API routes (already handled above)
   if (req.path.startsWith('/api/') || req.path === '/health') {
     return res.status(404).json({ success: false, message: 'Route not found' });
   }
-  // Redirect to frontend preserving path and query string
-  const redirectUrl = `${frontendUrl}${req.path}${req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''}`;
-  res.redirect(302, redirectUrl);
+  const frontendUrl = process.env.FRONTEND_URL || 'https://jobrobotsaii-qbjo.vercel.app';
+  const queryString = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  const targetUrl = `${frontendUrl}${req.path}${queryString}`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${targetUrl}"><title>Redirecting...</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0f;color:#fff;}</style></head><body><p>Redirecting to reset password page... <a href="${targetUrl}">Click here if not redirected</a>.</p></body></html>`);
 });
 
-// 404 fallback (for edge cases)
+// 404 fallback
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
