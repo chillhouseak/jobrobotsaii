@@ -37,7 +37,19 @@ app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'JobRobots AI API is running' });
 });
 
-// 404 fallback
+// Redirect all non-API routes to frontend (preserve path + query string)
+const frontendUrl = process.env.FRONTEND_URL || 'https://jobrobotsaii-qbjo.vercel.app';
+app.get('*', (req, res) => {
+  // Skip API routes (already handled above)
+  if (req.path.startsWith('/api/') || req.path === '/health') {
+    return res.status(404).json({ success: false, message: 'Route not found' });
+  }
+  // Redirect to frontend preserving path and query string
+  const redirectUrl = `${frontendUrl}${req.path}${req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''}`;
+  res.redirect(302, redirectUrl);
+});
+
+// 404 fallback (for edge cases)
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
