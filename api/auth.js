@@ -50,7 +50,21 @@ const getAction = (req) => {
   return url.replace(/^\//, '') || null;
 };
 
+// CORS headers — allow all Vercel frontend domains and localhost
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 export default async function handler(req, res) {
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).set(corsHeaders).send('');
+  }
+
+  res.set(corsHeaders);
+
   const action = getAction(req);
   const { method, body } = req;
 
