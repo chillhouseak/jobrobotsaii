@@ -4,8 +4,8 @@ import IPNTransaction from './models/IPNTransaction.js';
 export const connectDB = async () => {
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGO_URI not set in Vercel project settings');
-  if (mongoose.connection.readyState) return;
-  await mongoose.connect(uri, { bufferCommands: false });
+  if (mongoose.connection.readyState === 1) return;
+  await mongoose.connect(uri);
 };
 
 const getAction = (req) => {

@@ -191,6 +191,16 @@ const Login = () => {
           <p className={`text-center mt-6 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             New user? Just enter your email and password to get started
           </p>
+
+          {/* Forgot Password */}
+          <p className={`text-center mt-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <button
+              onClick={() => navigate('/forgot-password')}
+              className="text-primary hover:underline font-medium"
+            >
+              Forgot Password?
+            </button>
+          </p>
         </div>
       </div>
     </div>

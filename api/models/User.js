@@ -34,7 +34,11 @@ const userSchema = new mongoose.Schema({
   launchpadCustomerId: { type: String, default: null },
   aiCredits: { type: Number, default: 10 },
   resumeGenerations: { type: Number, default: 0 },
-  interviewSessions: { type: Number, default: 0 }
+  interviewSessions: { type: Number, default: 0 },
+
+  // Password Reset
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpiry: { type: Date, default: null }
 }, { timestamps: true });
 
 userSchema.index({ plan: 1 });

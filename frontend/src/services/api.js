@@ -138,6 +138,20 @@ class ApiService {
       body: JSON.stringify({ resume, jobDescription, targetRole }),
     });
   }
+
+  async forgotPassword(email) {
+    return this.request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token, newPassword) {
+    return this.request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    });
+  }
 }
 
 export const apiService = new ApiService();

@@ -24,6 +24,11 @@
    ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://your-admin.vercel.app
    GEMINI_API_KEY=...
    ELEVENLABS_API_KEY=...
+   FRONTEND_URL=https://your-frontend.vercel.app
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_USER=your@gmail.com
+   EMAIL_PASS=your_gmail_app_password
    ```
 5. Deploy
 6. Copy URL (e.g., `https://jobrobots-backend.up.railway.app`)
