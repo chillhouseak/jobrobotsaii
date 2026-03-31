@@ -48,6 +48,10 @@ const ResetPassword = () => {
     e.preventDefault();
     setError('');
 
+    console.log('[ResetPassword] handleSubmit called');
+    console.log('[ResetPassword] token:', token ? 'present' : 'MISSING');
+    console.log('[ResetPassword] password length:', password.length);
+
     if (!token) {
       setError('Reset token is missing. Please request a new password reset link.');
       return;
@@ -57,11 +61,23 @@ const ResetPassword = () => {
 
     setIsLoading(true);
     try {
-      const result = await apiService.resetPassword(token, password);
-      if (result.success) {
+      // Call reset-password API directly, bypassing apiService to debug
+      const url = `${import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api'}/auth/reset-password`;
+      console.log('[ResetPassword] Calling:', 'POST', url);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: password }),
+      });
+      const data = await response.json();
+      console.log('[ResetPassword] Response:', response.status, data);
+      if (data.success) {
         setSuccess(true);
+      } else {
+        setError(data.message || 'Something went wrong.');
       }
     } catch (err) {
+      console.error('[ResetPassword] Error:', err);
       setError(err.message || 'Something went wrong. The link may have expired.');
     } finally {
       setIsLoading(false);
