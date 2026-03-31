@@ -204,7 +204,7 @@ export async function forgotPasswordHandler(req, res) {
     await user.save();
 
     // Send email
-    const frontendUrl = process.env.FRONTEND_URL || 'https://jobrobotsai.vercel.app';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://jobrobotsaii-qbjo.vercel.app';
     const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
     const emailHtml = `
