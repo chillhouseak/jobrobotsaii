@@ -4,6 +4,9 @@ import authHandler from './auth.js';
 import adminHandler from './admin.js';
 import aiHandler from './ai.js';
 import webhookHandler from './webhooks.js';
+import applicationsHandler from './applications.js';
+import jobsHandler from './jobs.js';
+import searchHandler from './search.js';
 
 const app = express();
 
@@ -23,6 +26,9 @@ app.use('/api/auth', authHandler);
 app.use('/api/admin', adminHandler);
 app.use('/api/ai', aiHandler);
 app.use('/api/webhooks', webhookHandler);
+app.use('/api/applications', applicationsHandler);
+app.use('/api/jobs', jobsHandler);
+app.use('/api/search', searchHandler);
 
 // Health check routes
 app.get('/', (_req, res) => {

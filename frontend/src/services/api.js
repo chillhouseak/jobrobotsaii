@@ -87,10 +87,6 @@ class ApiService {
     return user ? JSON.parse(user) : null;
   }
 
-  isAuthenticated() {
-    return !!this.getToken();
-  }
-
   logout() {
     this.removeToken();
     // Don't use window.location.href — it causes full page reload which wipes React state
@@ -178,6 +174,63 @@ class ApiService {
     return this.request('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ token, newPassword }),
+    });
+  }
+
+  // Search across applications and jobs
+  async search(query) {
+    return this.request(`/search?q=${encodeURIComponent(query)}`);
+  }
+
+  // Applications CRUD
+  async getApplications(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/applications${qs ? '?' + qs : ''}`);
+  }
+
+  async createApplication(data) {
+    return this.request('/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateApplication(id, data) {
+    return this.request(`/applications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteApplication(id) {
+    return this.request(`/applications/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Jobs CRUD
+  async getJobs(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/jobs${qs ? '?' + qs : ''}`);
+  }
+
+  async createJob(data) {
+    return this.request('/jobs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateJob(id, data) {
+    return this.request(`/jobs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteJob(id) {
+    return this.request(`/jobs/${id}`, {
+      method: 'DELETE',
     });
   }
 }

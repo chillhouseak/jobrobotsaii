@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Search, Briefcase, FileText, Sparkles, MapPin, Building2, Calendar, ArrowRight, Loader2, X } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -13,26 +13,31 @@ const SearchPage = () => {
   const [results, setResults] = useState(null);
   const [searched, setSearched] = useState(false);
 
-  useEffect(() => {
-    if (query) {
-      performSearch(query);
-    }
-  }, [query]);
-
-  const performSearch = (q) => {
+  const performSearch = useCallback(async (q) => {
     if (!q.trim()) return;
     setIsSearching(true);
     setSearched(true);
 
-    // Simulate search across your app data
-    // You can replace this with actual API calls
-    setTimeout(() => {
-      // Mock results — replace with real API integration
-      const mockResults = generateMockResults(q);
-      setResults(mockResults);
+    try {
+      const response = await apiService.search(q);
+      if (response.success) {
+        setResults(response.data);
+      } else {
+        setResults({ applications: [], jobs: [], total: 0 });
+      }
+    } catch (err) {
+      console.error('Search failed:', err);
+      setResults({ applications: [], jobs: [], total: 0 });
+    } finally {
       setIsSearching(false);
-    }, 800);
-  };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (query) {
+      performSearch(query);
+    }
+  }, [query, performSearch]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -133,7 +138,7 @@ const SearchPage = () => {
                 <div className="space-y-3">
                   {results.applications.map((app) => (
                     <Link
-                      key={app.id}
+                      key={app._id}
                       to="/applications"
                       className="block p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all group"
                     >
@@ -178,7 +183,7 @@ const SearchPage = () => {
                 <div className="space-y-3">
                   {results.jobs.map((job) => (
                     <a
-                      key={job.id}
+                      key={job._id}
                       href={job.url || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -192,10 +197,10 @@ const SearchPage = () => {
                               <Building2 className="w-3.5 h-3.5" />
                               <span>{job.company}</span>
                             </span>
-                            {job.posted && (
+                            {job.postedDate && (
                               <span className="flex items-center space-x-1">
                                 <Calendar className="w-3.5 h-3.5" />
-                                <span>{job.posted}</span>
+                                <span>{new Date(job.postedDate).toLocaleDateString()}</span>
                               </span>
                             )}
                           </div>
@@ -260,35 +265,6 @@ const SearchPage = () => {
       </div>
     </Layout>
   );
-};
-
-// Mock data generator — replace with real API calls
-const generateMockResults = (query) => {
-  const q = query.toLowerCase();
-  const mockApplications = [
-    { id: 1, role: 'Frontend Developer', company: 'TechCorp Inc.', location: 'Remote', status: 'applied' },
-    { id: 2, role: 'Full Stack Engineer', company: 'StartupXYZ', location: 'New York, NY', status: 'interview' },
-    { id: 3, role: 'React Developer', company: 'WebAgency', location: 'San Francisco, CA', status: 'applied' },
-  ].filter(app =>
-    app.role.toLowerCase().includes(q) ||
-    app.company.toLowerCase().includes(q) ||
-    app.location.toLowerCase().includes(q)
-  );
-
-  const mockJobs = [
-    { id: 1, title: 'Senior Frontend Developer', company: 'BigTech Co.', posted: '2 days ago', url: '#' },
-    { id: 2, title: 'React Engineer - Remote', company: 'RemoteFirst', posted: '1 week ago', url: '#' },
-    { id: 3, title: 'UI/UX Engineer', company: 'DesignLabs', posted: '3 days ago', url: '#' },
-  ].filter(job =>
-    job.title.toLowerCase().includes(q) ||
-    job.company.toLowerCase().includes(q)
-  );
-
-  return {
-    total: mockApplications.length + mockJobs.length,
-    applications: mockApplications,
-    jobs: mockJobs,
-  };
 };
 
 export default SearchPage;
