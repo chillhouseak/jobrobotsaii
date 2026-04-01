@@ -439,47 +439,63 @@ const AITools = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1.5">Style</label>
-                    <select
-                      value={imageStyle}
-                      onChange={(e) => setImageStyle(e.target.value)}
-                      disabled={imageLoading}
-                      className="input-field w-full px-4 py-3 rounded-xl text-white text-sm"
-                    >
-                      <option value="none">No Style</option>
-                      <optgroup label="Flux Models">
-                        <option value="flux">Flux (Default)</option>
-                        <option value="flux-realism">Flux Realism</option>
-                        <option value="flux-anime">Flux Anime</option>
-                        <option value="flux-canny">Flux Canny</option>
-                      </optgroup>
-                      <optgroup label="Any Diffusion">
-                        <option value="any-dark">Any Dark</option>
-                        <option value="any-diffuse">Any Diffuse</option>
-                      </optgroup>
-                      <optgroup label="Turbo Models">
-                        <option value="turbo">Turbo</option>
-                        <option value="turbo-realism">Turbo Realism</option>
-                        <option value="turbo-anime">Turbo Anime</option>
-                      </optgroup>
-                      <optgroup label="SDXL">
-                        <option value="sdxl">SDXL</option>
-                        <option value="playground-v2">Playground V2</option>
-                      </optgroup>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={imageStyle}
+                        onChange={(e) => setImageStyle(e.target.value)}
+                        disabled={imageLoading}
+                        className="w-full px-4 py-3 rounded-xl text-white text-sm appearance-none cursor-pointer pr-10"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          backdropFilter: 'blur(10px)',
+                        }}
+                      >
+                        <option value="none" style={{ background: '#1a1a2e' }}>No Style</option>
+                        <option value="flux" style={{ background: '#1a1a2e' }}>Flux — Default</option>
+                        <option value="flux-realism" style={{ background: '#1a1a2e' }}>Flux — Realism</option>
+                        <option value="flux-anime" style={{ background: '#1a1a2e' }}>Flux — Anime</option>
+                        <option value="flux-canny" style={{ background: '#1a1a2e' }}>Flux — Canny</option>
+                        <option value="any-dark" style={{ background: '#1a1a2e' }}>Any — Dark</option>
+                        <option value="any-diffuse" style={{ background: '#1a1a2e' }}>Any — Diffuse</option>
+                        <option value="turbo" style={{ background: '#1a1a2e' }}>Turbo — Default</option>
+                        <option value="turbo-realism" style={{ background: '#1a1a2e' }}>Turbo — Realism</option>
+                        <option value="turbo-anime" style={{ background: '#1a1a2e' }}>Turbo — Anime</option>
+                        <option value="sdxl" style={{ background: '#1a1a2e' }}>SDXL</option>
+                        <option value="playground-v2" style={{ background: '#1a1a2e' }}>Playground V2</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1.5">Size</label>
-                    <select
-                      value={imageSize}
-                      onChange={(e) => setImageSize(e.target.value)}
-                      disabled={imageLoading}
-                      className="input-field w-full px-4 py-3 rounded-xl text-white text-sm"
-                    >
-                      <option value="1024x1024">Square (1024×1024)</option>
-                      <option value="1024x576">Landscape (1024×576)</option>
-                      <option value="768x1024">Portrait (768×1024)</option>
-                      <option value="512x512">Small (512×512)</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={imageSize}
+                        onChange={(e) => setImageSize(e.target.value)}
+                        disabled={imageLoading}
+                        className="w-full px-4 py-3 rounded-xl text-white text-sm appearance-none cursor-pointer pr-10"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          backdropFilter: 'blur(10px)',
+                        }}
+                      >
+                        <option value="1024x1024" style={{ background: '#1a1a2e' }}>Square (1024×1024)</option>
+                        <option value="1024x576" style={{ background: '#1a1a2e' }}>Landscape (1024×576)</option>
+                        <option value="768x1024" style={{ background: '#1a1a2e' }}>Portrait (768×1024)</option>
+                        <option value="512x512" style={{ background: '#1a1a2e' }}>Small (512×512)</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
