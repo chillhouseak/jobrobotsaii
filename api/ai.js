@@ -91,6 +91,33 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, data: { message, creditsRemaining: user.aiCredits - 1 } });
     }
 
+    // Image Generation (Pollinations — no AI credits needed, free API)
+    if (action === 'generate-image' && method === 'POST') {
+      const { prompt, width = 1024, height = 1024, seed, style } = body || {};
+
+      if (!prompt || !prompt.trim()) {
+        return res.status(400).json({ success: false, message: 'Prompt is required' });
+      }
+
+      const encodedPrompt = encodeURIComponent(prompt.trim());
+      const styleParam = style && style !== 'none' ? `&model=${style}` : '';
+      const seedParam = seed ? `&seed=${seed}` : '';
+      const nologo = '&nologo=true';
+
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}${seedParam}${styleParam}${nologo}`;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          imageUrl,
+          prompt: prompt.trim(),
+          width,
+          height,
+          seed: seed || Math.floor(Math.random() * 999999999),
+        }
+      });
+    }
+
     return res.status(404).json({ success: false, message: 'Route not found' });
 
   } catch (error) {
