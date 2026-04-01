@@ -3,6 +3,17 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.verce
 // Frontend API calls go to: https://jobrobotsaii.vercel.app/api/...
 // Final URL example: https://jobrobotsaii.vercel.app/api/auth/login
 
+// Decode JWT to check expiry locally (avoids unnecessary API calls on refresh)
+const isTokenExpired = (token) => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    // exp is in seconds, Date.now() is ms
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true; // Invalid token format → treat as expired
+  }
+};
+
 class ApiService {
   getToken() {
     return localStorage.getItem('jobrobots_token');
@@ -82,7 +93,17 @@ class ApiService {
 
   logout() {
     this.removeToken();
-    window.location.href = '/login';
+    // Don't use window.location.href — it causes full page reload which wipes React state
+  }
+
+  isAuthenticated() {
+    const token = this.getToken();
+    if (!token) return false;
+    if (isTokenExpired(token)) {
+      this.removeToken();
+      return false;
+    }
+    return true;
   }
 
   // AI Methods

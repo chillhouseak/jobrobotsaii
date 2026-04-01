@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
 
 const AuthContext = createContext(null);
@@ -8,26 +8,37 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Initialize auth on app load
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = apiService.getUser();
       const token = apiService.getToken();
 
-      if (storedUser && token) {
-        setUser(storedUser);
-        // Optionally verify token with backend
-        try {
-          const response = await apiService.getMe();
-          if (response.success) {
-            setUser(response.data.user);
-            localStorage.setItem('jobrobots_user', JSON.stringify(response.data.user));
-          }
-        } catch (err) {
-          // Token invalid, clear auth
-          apiService.logout();
-          setUser(null);
-        }
+      // Fast local check: is token valid and not expired?
+      if (!token || !apiService.isAuthenticated()) {
+        apiService.removeToken();
+        setLoading(false);
+        return;
       }
+
+      // Token exists and is locally valid — restore session immediately
+      if (storedUser) {
+        setUser(storedUser);
+      }
+
+      // Then verify with backend (silent refresh)
+      try {
+        const response = await apiService.getMe();
+        if (response.success) {
+          setUser(response.data.user);
+          localStorage.setItem('jobrobots_user', JSON.stringify(response.data.user));
+        }
+      } catch {
+        // Backend says token invalid — clear auth
+        apiService.removeToken();
+        setUser(null);
+      }
+
       setLoading(false);
     };
 
@@ -39,6 +50,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await apiService.login(email, password);
       if (response.success) {
+        // Store user and token
+        localStorage.setItem('jobrobots_user', JSON.stringify(response.data.user));
+        if (response.data.token) {
+          apiService.setToken(response.data.token);
+        }
         setUser(response.data.user);
         return { success: true };
       } else {
@@ -57,6 +73,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await apiService.register(name, email, password);
       if (response.success) {
+        localStorage.setItem('jobrobots_user', JSON.stringify(response.data.user));
+        if (response.data.token) {
+          apiService.setToken(response.data.token);
+        }
         setUser(response.data.user);
         return { success: true };
       } else {
@@ -70,13 +90,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    apiService.logout();
+  const logout = useCallback(() => {
+    apiService.removeToken();
     setUser(null);
     setError(null);
-  };
+    // Let ProtectedRoute/PublicRoute handle the redirect via React Router
+    // No window.location.href — React state stays intact
+  }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => setError(null), []);
 
   return (
     <AuthContext.Provider
