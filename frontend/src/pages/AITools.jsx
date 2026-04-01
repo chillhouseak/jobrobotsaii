@@ -446,12 +446,25 @@ const AITools = () => {
                       className="input-field w-full px-4 py-3 rounded-xl text-white text-sm"
                     >
                       <option value="none">No Style</option>
-                      <option value="flux">Flux</option>
-                      <option value="flux-realism">Flux Realism</option>
-                      <option value="flux-anime">Flux Anime</option>
-                      <option value="flux-canny">Flux Canny</option>
-                      <option value="any-dark">Any Dark</option>
-                      <option value="any-diffuse">Any Diffuse</option>
+                      <optgroup label="Flux Models">
+                        <option value="flux">Flux (Default)</option>
+                        <option value="flux-realism">Flux Realism</option>
+                        <option value="flux-anime">Flux Anime</option>
+                        <option value="flux-canny">Flux Canny</option>
+                      </optgroup>
+                      <optgroup label="Any Diffusion">
+                        <option value="any-dark">Any Dark</option>
+                        <option value="any-diffuse">Any Diffuse</option>
+                      </optgroup>
+                      <optgroup label="Turbo Models">
+                        <option value="turbo">Turbo</option>
+                        <option value="turbo-realism">Turbo Realism</option>
+                        <option value="turbo-anime">Turbo Anime</option>
+                      </optgroup>
+                      <optgroup label="SDXL">
+                        <option value="sdxl">SDXL</option>
+                        <option value="playground-v2">Playground V2</option>
+                      </optgroup>
                     </select>
                   </div>
                   <div>
