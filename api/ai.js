@@ -51,6 +51,68 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ============================================================
+    // PUBLIC ROUTES — no authentication required
+    // ============================================================
+
+    // Image Generation (Pollinations — free, no auth)
+    if (action === 'generate-image' && method === 'POST') {
+      const { prompt, width = 1024, height = 1024, seed, style } = body || {};
+
+      if (!prompt || !prompt.trim()) {
+        return res.status(400).json({ success: false, message: 'Prompt is required' });
+      }
+
+      const encodedPrompt = encodeURIComponent(prompt.trim());
+      const styleParam = style && style !== 'none' ? `&model=${style}` : '';
+      const seedParam = seed ? `&seed=${seed}` : '';
+      const nologo = '&nologo=true';
+
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}${seedParam}${styleParam}${nologo}`;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          imageUrl,
+          prompt: prompt.trim(),
+          width,
+          height,
+          seed: seed || Math.floor(Math.random() * 999999999),
+        }
+      });
+    }
+
+    // Goal Tracker — free AI feature, no auth
+    if ((action === 'goal-tracker' || action === 'generate-goal') && method === 'POST') {
+      const { goal, role, timeframe, obstacles } = body || {};
+
+      if (!goal) {
+        return res.status(400).json({ success: false, message: 'Goal is required' });
+      }
+
+      const prompt = `You are an AI career advisor helping a ${role || 'professional'} create an actionable goal plan.\n\nGoal: ${goal}\nTimeframe: ${timeframe || '3 months'}\nPotential Obstacles: ${obstacles || 'Limited time, resource constraints'}\n\nCreate a detailed, actionable plan with milestones, weekly tasks, and success metrics. Be specific and practical.`;
+      const result = await callGemini(prompt);
+
+      return res.status(200).json({ success: true, data: { result } });
+    }
+
+    // Resume Tailor — free AI feature, no auth
+    if (action === 'tailor-resume' && method === 'POST') {
+      const { resume, jobDescription, targetRole } = body || {};
+
+      if (!resume || !jobDescription) {
+        return res.status(400).json({ success: false, message: 'Resume and job description are required' });
+      }
+
+      const prompt = `You are a professional resume writer. Tailor the following resume for the job description.\n\nResume:\n${resume}\n\nJob Description:\n${jobDescription}\n\nTarget Role: ${targetRole || 'the role above'}\n\nRewrite the resume to highlight the most relevant skills and experience. Keep it concise (max 2 pages). Use action verbs and quantify achievements where possible. Return the tailored resume in clean markdown format.`;
+      const tailoredResume = await callGemini(prompt);
+
+      return res.status(200).json({ success: true, data: { tailoredResume } });
+    }
+
+    // ============================================================
+    // PROTECTED ROUTES — authentication required
+    // ============================================================
     const decoded = await authMiddleware(req);
     const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -89,33 +151,6 @@ export default async function handler(req, res) {
       const message = await callGemini(prompt);
       await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
       return res.status(200).json({ success: true, data: { message, creditsRemaining: user.aiCredits - 1 } });
-    }
-
-    // Image Generation (Pollinations — no AI credits needed, free API)
-    if (action === 'generate-image' && method === 'POST') {
-      const { prompt, width = 1024, height = 1024, seed, style } = body || {};
-
-      if (!prompt || !prompt.trim()) {
-        return res.status(400).json({ success: false, message: 'Prompt is required' });
-      }
-
-      const encodedPrompt = encodeURIComponent(prompt.trim());
-      const styleParam = style && style !== 'none' ? `&model=${style}` : '';
-      const seedParam = seed ? `&seed=${seed}` : '';
-      const nologo = '&nologo=true';
-
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}${seedParam}${styleParam}${nologo}`;
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          imageUrl,
-          prompt: prompt.trim(),
-          width,
-          height,
-          seed: seed || Math.floor(Math.random() * 999999999),
-        }
-      });
     }
 
     return res.status(404).json({ success: false, message: 'Route not found' });
