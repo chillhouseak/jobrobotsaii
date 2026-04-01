@@ -20,6 +20,7 @@ import ResumeTailor from './pages/ResumeTailor';
 import Bonuses from './pages/Bonuses';
 import Upgrade from './pages/Upgrade';
 import Support from './pages/Support';
+import Search from './pages/Search';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -194,6 +195,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Support />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/search"
+              element={
+                <ProtectedRoute>
+                  <Search />
                 </ProtectedRoute>
               }
             />
