@@ -1,75 +1,60 @@
+import axios from 'axios';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api';
 
-// Admin API calls go to: https://jobrobotsaii.vercel.app/api/admin/...
-// Final URL example: https://jobrobotsaii.vercel.app/api/admin/login
+// Axios instance with interceptors
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-class ApiService {
-  getHeaders() {
+// Request interceptor — attach token from localStorage
+apiClient.interceptors.request.use(
+  (config) => {
     const token = localStorage.getItem('adminToken');
-    return {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` })
-    };
-  }
-
-  async request(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
-    console.log('Admin API Request:', options.method || 'GET', url);
-
-    const config = {
-      ...options,
-      headers: {
-        ...this.getHeaders(),
-        ...options.headers
-      }
-    };
-
-    try {
-      const response = await fetch(url, config);
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('adminToken');
-          window.location.href = '/login';
-        }
-        throw new Error(data.message || 'Request failed');
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Admin API Error:', error);
-      throw error;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-  }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-  get(endpoint, params) {
-    const queryString = params
-      ? '?' + new URLSearchParams(params).toString()
-      : '';
-    return this.request(`${endpoint}${queryString}`);
+// Response interceptor — handle 401 globally
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid — clear and let AuthContext handle redirect
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('adminData');
+      // Use a custom event so AuthContext can react without page reload
+      window.dispatchEvent(new CustomEvent('admin:logout'));
+    }
+    return Promise.reject(error);
   }
+);
+
+// API methods
+export const api = {
+  get(endpoint, params) {
+    return apiClient.get(endpoint, { params }).then((res) => res.data);
+  },
 
   post(endpoint, data) {
-    return this.request(endpoint, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
+    return apiClient.post(endpoint, data).then((res) => res.data);
+  },
 
   put(endpoint, data) {
-    return this.request(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  }
+    return apiClient.put(endpoint, data).then((res) => res.data);
+  },
 
   delete(endpoint) {
-    return this.request(endpoint, {
-      method: 'DELETE'
-    });
-  }
-}
+    return apiClient.delete(endpoint).then((res) => res.data);
+  },
+};
 
-export const api = new ApiService();
 export default api;
