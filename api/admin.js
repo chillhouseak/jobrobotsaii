@@ -160,8 +160,14 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Admin error:', error);
-    if (error.message.includes('Access denied') || error.message.includes('Admin')) {
-      return res.status(401).json({ success: false, message: error.message });
+    if (
+      error.name === 'JsonWebTokenError' ||
+      error.name === 'TokenExpiredError' ||
+      error.message.includes('Access denied') ||
+      error.message.includes('Admin') ||
+      error.message.includes('jwt')
+    ) {
+      return res.status(401).json({ success: false, message: error.message || 'Invalid or expired token' });
     }
     return res.status(500).json({ success: false, message: error.message });
   }
