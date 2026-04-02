@@ -119,10 +119,6 @@ const AITools = () => {
         imageStyle
       );
 
-      console.log('[Image Gen] Full response:', response);
-      console.log('[Image Gen] imageUrl:', response?.data?.imageUrl);
-      console.log('[Image Gen] prompt:', response?.data?.prompt);
-
       if (response.success && response.data?.imageUrl) {
         setGeneratedImage({
           url: response.data.imageUrl,
@@ -134,7 +130,6 @@ const AITools = () => {
         setImageError('Unexpected response: ' + JSON.stringify(response));
       }
     } catch (error) {
-      console.error('[Image Gen] Error:', error);
       setImageError(error.message || 'Failed to generate image');
     } finally {
       setImageLoading(false);
