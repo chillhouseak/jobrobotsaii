@@ -4,15 +4,12 @@ import CreateUserModal from '../components/CreateUserModal';
 import {
   Search,
   UserPlus,
-  MoreVertical,
   Ban,
   CheckCircle,
   Trash2,
   Eye,
-  Download,
   ChevronLeft,
   ChevronRight,
-  Filter,
   X
 } from 'lucide-react';
 
@@ -91,22 +88,6 @@ export default function Users() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const response = await fetch('/api/admin/export/users', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` }
-      });
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `users-${Date.now()}.csv`;
-      a.click();
-    } catch (error) {
-      console.error('Export failed:', error);
-    }
-  };
-
   const viewUser = async (userId) => {
     try {
       const response = await api.get(`/admin/users/${userId}`);
@@ -127,22 +108,13 @@ export default function Users() {
           <h1 className="text-2xl font-bold text-text-primary">User Management</h1>
           <p className="text-text-secondary mt-1">Manage and monitor all users</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 glass rounded-xl text-text-primary hover:bg-white/10 transition-all"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-primary text-white font-medium rounded-xl hover:bg-accent-primary/90 transition-all"
-          >
-            <UserPlus className="w-4 h-4" />
-            Create User
-          </button>
-        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-primary text-white font-medium rounded-xl hover:bg-accent-primary/90 transition-all"
+        >
+          <UserPlus className="w-4 h-4" />
+          Create User
+        </button>
       </div>
 
       {/* Filters */}
