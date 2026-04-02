@@ -128,6 +128,10 @@ class ApiService {
     return this.request('/ai/status');
   }
 
+  async checkCredits() {
+    return this.request('/ai/check-credits');
+  }
+
   async generateVoiceOver(text, voiceType, tone, speed) {
     return this.request('/ai/voice-over', {
       method: 'POST',

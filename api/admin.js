@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import User from './models/User.js';
+import User, { PLAN_CREDITS } from './models/User.js';
 import Admin from './models/Admin.js';
 import Webhook from './models/Webhook.js';
 
@@ -156,13 +156,16 @@ export default async function handler(req, res) {
         return res.status(409).json({ success: false, message: 'A user with this email already exists' });
       }
 
+      const resolvedPlan = ['free', 'standard', 'unlimited', 'agency'].includes(plan) ? plan : 'free';
+
       const user = new User({
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password, // hashed by pre-save hook
-        plan: ['free', 'standard', 'unlimited', 'agency'].includes(plan) ? plan : 'free',
+        plan: resolvedPlan,
         status: ['active', 'suspended', 'pending'].includes(status) ? status : 'active',
-        createdVia: 'admin'
+        createdVia: 'admin',
+        aiCredits: PLAN_CREDITS[resolvedPlan]
       });
 
       await user.save();
