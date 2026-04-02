@@ -142,6 +142,38 @@ export default async function handler(req, res) {
       });
     }
 
+    // Create user
+    if (action === 'create-user' && method === 'POST') {
+      await adminAuth(req);
+      const { name, email, password, plan, status } = body || {};
+
+      if (!name || !email || !password) {
+        return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+      }
+
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing) {
+        return res.status(409).json({ success: false, message: 'A user with this email already exists' });
+      }
+
+      const user = new User({
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        password, // hashed by pre-save hook
+        plan: ['free', 'standard', 'unlimited', 'agency'].includes(plan) ? plan : 'free',
+        status: ['active', 'suspended', 'pending'].includes(status) ? status : 'active',
+        createdVia: 'admin'
+      });
+
+      await user.save();
+
+      return res.status(201).json({
+        success: true,
+        message: 'User created successfully',
+        data: { user }
+      });
+    }
+
     // Subscriptions
     if (action === 'subscriptions' && method === 'GET') {
       await adminAuth(req);

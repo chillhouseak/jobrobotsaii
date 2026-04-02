@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import CreateUserModal from '../components/CreateUserModal';
 import {
   Search,
   UserPlus,
@@ -23,6 +24,7 @@ export default function Users() {
   const [filters, setFilters] = useState({ status: '', plan: '' });
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => {
@@ -125,13 +127,22 @@ export default function Users() {
           <h1 className="text-2xl font-bold text-text-primary">User Management</h1>
           <p className="text-text-secondary mt-1">Manage and monitor all users</p>
         </div>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2 glass rounded-xl text-text-primary hover:bg-white/10 transition-all"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 glass rounded-xl text-text-primary hover:bg-white/10 transition-all"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-primary text-white font-medium rounded-xl hover:bg-accent-primary/90 transition-all"
+          >
+            <UserPlus className="w-4 h-4" />
+            Create User
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -337,6 +348,14 @@ export default function Users() {
           </div>
         )}
       </div>
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => fetchUsers()}
+        />
+      )}
 
       {/* User Detail Modal */}
       {showUserModal && selectedUser && (
