@@ -11,9 +11,10 @@ import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 
 function ProtectedRoute({ children }) {
-  const { admin, loading } = useAuth();
+  const { admin, isReady } = useAuth();
 
-  if (loading) {
+  // Still initializing — show spinner
+  if (!isReady) {
     return (
       <div className="min-h-screen bg-background-primary flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-primary"></div>
@@ -21,17 +22,20 @@ function ProtectedRoute({ children }) {
     );
   }
 
+  // Initialized but no admin — redirect to login
   if (!admin) {
     return <Navigate to="/login" replace />;
   }
 
+  // Admin exists — show dashboard
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { admin, loading } = useAuth();
+  const { admin, isReady } = useAuth();
 
-  if (loading) {
+  // Still initializing — show spinner
+  if (!isReady) {
     return (
       <div className="min-h-screen bg-background-primary flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-primary"></div>
@@ -39,10 +43,12 @@ function PublicRoute({ children }) {
     );
   }
 
+  // Admin exists — already logged in, redirect to dashboard
   if (admin) {
     return <Navigate to="/" replace />;
   }
 
+  // No admin — show login page
   return children;
 }
 

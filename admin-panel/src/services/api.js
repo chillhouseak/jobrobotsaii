@@ -31,7 +31,8 @@ class ApiService {
       if (!response.ok) {
         if (response.status === 401) {
           localStorage.removeItem('adminToken');
-          window.location.href = '/login';
+          // Let AuthContext handle the redirect — dispatch event
+          window.dispatchEvent(new CustomEvent('admin:unauthorized'));
         }
         throw new Error(data.message || 'Request failed');
       }
