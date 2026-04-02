@@ -227,7 +227,7 @@ export default async function handler(req, res) {
   }
 
   // Image Proxy — fetches image from Pollinations and returns with CORS headers
-  // This solves the browser CORS block when loading Pollinations images directly in <img> src
+  // Handles redirects (Pollinations → Aliyun CDN) and validates binary image response
   if (action === 'proxy-image' && method === 'GET') {
     const { url } = req.query || {};
     if (!url) return res.status(400).json({ success: false, message: 'url query param required' });
@@ -238,13 +238,21 @@ export default async function handler(req, res) {
     }
 
     try {
+      // fetch follows redirects automatically (mode: 'follow' is default)
       const imageRes = await fetch(url);
-      if (!imageRes.ok) {
-        return res.status(502).json({ success: false, message: 'Failed to fetch image from Pollinations' });
+
+      // Check if response is actually an image (not HTML error page)
+      const contentType = imageRes.headers.get('content-type') || '';
+      if (!contentType.startsWith('image/')) {
+        // Pollinations returned HTML (error page or redirect page) instead of an image
+        return res.status(502).json({
+          success: false,
+          message: 'Pollinations returned an error page instead of an image. Try a different prompt.',
+          hint: 'Try simplifying your prompt or waiting a moment before retrying.',
+        });
       }
 
       const imageBuffer = await imageRes.arrayBuffer();
-      const contentType = imageRes.headers.get('content-type') || 'image/png';
 
       res.set({
         'Content-Type': contentType,
@@ -257,7 +265,7 @@ export default async function handler(req, res) {
       return res.status(200).send(Buffer.from(imageBuffer));
     } catch (err) {
       console.error('Proxy image error:', err);
-      return res.status(500).json({ success: false, message: 'Proxy error' });
+      return res.status(500).json({ success: false, message: 'Proxy error: ' + err.message });
     }
   }
 
