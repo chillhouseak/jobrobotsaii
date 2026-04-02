@@ -3,6 +3,12 @@ import { Sparkles, Copy, Check, RefreshCw, MessageSquare, Mail, FileText, Zap, D
 import Layout from '../components/Layout';
 import apiService from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api';
+
+// Proxy image through our backend to avoid browser CORS block on Pollinations CDN
+const proxyImageUrl = (url) =>
+  `${API_BASE_URL}/ai/proxy-image?url=${encodeURIComponent(url)}`;
+
 const AITools = () => {
   const [activeTab, setActiveTab] = useState('answer');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -564,7 +570,7 @@ const AITools = () => {
                   {/* Image loaded successfully */}
                   {!imageFetching && !imageLoadError && generatedImage && (
                     <img
-                      src={generatedImage.url}
+                      src={proxyImageUrl(generatedImage.url)}
                       alt={generatedImage.prompt}
                       onLoad={() => setImageLoadError(false)}
                       onError={() => setImageLoadError(true)}

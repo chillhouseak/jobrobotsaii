@@ -226,6 +226,41 @@ export default async function handler(req, res) {
     });
   }
 
+  // Image Proxy — fetches image from Pollinations and returns with CORS headers
+  // This solves the browser CORS block when loading Pollinations images directly in <img> src
+  if (action === 'proxy-image' && method === 'GET') {
+    const { url } = req.query || {};
+    if (!url) return res.status(400).json({ success: false, message: 'url query param required' });
+
+    // Only allow Pollinations URLs for security
+    if (!url.includes('image.pollinations.ai')) {
+      return res.status(400).json({ success: false, message: 'Only Pollinations URLs allowed' });
+    }
+
+    try {
+      const imageRes = await fetch(url);
+      if (!imageRes.ok) {
+        return res.status(502).json({ success: false, message: 'Failed to fetch image from Pollinations' });
+      }
+
+      const imageBuffer = await imageRes.arrayBuffer();
+      const contentType = imageRes.headers.get('content-type') || 'image/png';
+
+      res.set({
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+
+      return res.status(200).send(Buffer.from(imageBuffer));
+    } catch (err) {
+      console.error('Proxy image error:', err);
+      return res.status(500).json({ success: false, message: 'Proxy error' });
+    }
+  }
+
   // Goal Tracker
   if ((action === 'goal-tracker' || action === 'generate-goal') && method === 'POST') {
     try {
