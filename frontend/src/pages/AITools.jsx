@@ -30,6 +30,8 @@ const AITools = () => {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
+  const [imageFetching, setImageFetching] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
 
   const handleCopy = () => {
     const text = answerOutput || outreachOutput || coverOutput;
@@ -104,6 +106,8 @@ const AITools = () => {
     if (!imagePrompt.trim()) return;
     setImageLoading(true);
     setImageError('');
+    setImageFetching(false);
+    setImageLoadError(false);
 
     try {
       const [width, height] = imageSize.split('x').map(Number);
@@ -114,17 +118,27 @@ const AITools = () => {
         null,
         imageStyle
       );
-      if (response.success) {
+
+      console.log('[Image Gen] Full response:', response);
+      console.log('[Image Gen] imageUrl:', response?.data?.imageUrl);
+      console.log('[Image Gen] prompt:', response?.data?.prompt);
+
+      if (response.success && response.data?.imageUrl) {
         setGeneratedImage({
           url: response.data.imageUrl,
           prompt: response.data.prompt,
           seed: response.data.seed,
         });
+        setImageFetching(true);
+      } else {
+        setImageError('Unexpected response: ' + JSON.stringify(response));
       }
     } catch (error) {
+      console.error('[Image Gen] Error:', error);
       setImageError(error.message || 'Failed to generate image');
+    } finally {
+      setImageLoading(false);
     }
-    setImageLoading(false);
   };
 
   const downloadImage = async (imageUrl) => {
@@ -148,6 +162,8 @@ const AITools = () => {
     setGeneratedImage(null);
     setImagePrompt('');
     setImageError('');
+    setImageFetching(false);
+    setImageLoadError(false);
   };
 
   const tabs = [
@@ -541,12 +557,42 @@ const AITools = () => {
                     </button>
                   </div>
                 </div>
-                <div className="relative rounded-xl overflow-hidden bg-gray-900">
-                  <img
-                    src={generatedImage.url}
-                    alt={generatedImage.prompt}
-                    className="w-full object-contain max-h-[512px] mx-auto"
-                  />
+                <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px]">
+                  {/* Fetching from Pollinations CDN */}
+                  {imageFetching && !imageLoadError && (
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
+                      <p className="text-gray-400 text-sm">Fetching image...</p>
+                    </div>
+                  )}
+
+                  {/* Image loaded successfully */}
+                  {!imageFetching && !imageLoadError && generatedImage && (
+                    <img
+                      src={generatedImage.url}
+                      alt={generatedImage.prompt}
+                      onLoad={() => setImageLoadError(false)}
+                      onError={() => setImageLoadError(true)}
+                      className="w-full object-contain max-h-[512px] mx-auto"
+                    />
+                  )}
+
+                  {/* Image failed to load */}
+                  {imageLoadError && (
+                    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                      <Image className="w-12 h-12 text-gray-600 mb-3" />
+                      <p className="text-gray-400 text-sm mb-2">Image failed to load</p>
+                      <p className="text-gray-500 text-xs mb-3 break-all max-w-full px-2">
+                        {generatedImage?.url?.substring(0, 80)}...
+                      </p>
+                      <button
+                        onClick={() => { setImageLoadError(false); setImageFetching(false); setImageLoading(true); generateImage(); }}
+                        className="text-primary text-sm hover:underline"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
                 <p className="mt-1 text-gray-500 text-xs">Seed: {generatedImage.seed}</p>
