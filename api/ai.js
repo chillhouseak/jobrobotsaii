@@ -212,61 +212,64 @@ export default async function handler(req, res) {
   // PUBLIC ROUTES
   // ============================================================
 
-  // Image Generation (Pollinations — free, no auth, no AI key needed)
+  // Image Generation — uses Pollinations async API to get a CDN URL
+  // instead of waiting for the blocking /prompt/ endpoint.
+  // Flow: submit job → poll until done → return CDN URL (fast, no timeout).
   if (action === 'generate-image' && method === 'POST') {
     const { prompt, width = 1024, height = 1024, seed, style } = body || {};
     if (!prompt?.trim()) return res.status(400).json({ success: false, message: 'Prompt is required' });
 
-    const encoded = encodeURIComponent(prompt.trim());
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}${seed ? '&seed=' + seed : ''}${style && style !== 'none' ? '&model=' + style : ''}&nologo=true`;
+    const encodedPrompt = encodeURIComponent(prompt.trim());
+    const resolvedSeed = seed || Math.floor(Math.random() * 999999999);
+    const styleParam = style && style !== 'none' ? `&model=${style}` : '';
+
+    // Step 1: Submit generation job to async endpoint
+    const submitRes = await fetch(
+      `https://text2image.pollinations.ai/generate-image?prompt=${encodedPrompt}&width=${width}&height=${height}&seed=${resolvedSeed}${styleParam}&nologo=true`,
+      { method: 'POST' }
+    );
+
+    if (!submitRes.ok) {
+      return res.status(502).json({ success: false, message: 'Pollinations API error. Please try again.' });
+    }
+
+    let imageUrl = null;
+    const submitData = await submitRes.json();
+
+    // If the response contains a URL directly (image already ready), use it
+    if (submitData.imageUrl) {
+      imageUrl = submitData.imageUrl;
+    } else if (submitData.id) {
+      // Step 2: Poll for completion (Pollinations generates async)
+      const pollUrl = `https://text2image.pollinations.ai/image/${submitData.id}`;
+      const maxAttempts = 30;
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 2000 + attempts * 200)); // backoff
+        const pollRes = await fetch(pollUrl);
+        if (!pollRes.ok) { attempts++; continue; }
+
+        const pollData = await pollRes.json().catch(() => null);
+        if (pollData?.imageUrl) {
+          imageUrl = pollData.imageUrl;
+          break;
+        }
+        if (pollData?.status === 'error') {
+          return res.status(502).json({ success: false, message: 'Image generation failed. Try a different prompt.' });
+        }
+        attempts++;
+      }
+    }
+
+    if (!imageUrl) {
+      return res.status(504).json({ success: false, message: 'Image generation timed out. Please try again.' });
+    }
 
     return res.status(200).json({
       success: true,
-      data: { imageUrl, prompt: prompt.trim(), width, height, seed: seed || Math.floor(Math.random() * 999999999) },
+      data: { imageUrl, prompt: prompt.trim(), width, height, seed: resolvedSeed },
     });
-  }
-
-  // Image Proxy — fetches image from Pollinations and returns with CORS headers
-  // Handles redirects (Pollinations → Aliyun CDN) and validates binary image response
-  if (action === 'proxy-image' && method === 'GET') {
-    const { url } = req.query || {};
-    if (!url) return res.status(400).json({ success: false, message: 'url query param required' });
-
-    // Only allow Pollinations URLs for security
-    if (!url.includes('image.pollinations.ai')) {
-      return res.status(400).json({ success: false, message: 'Only Pollinations URLs allowed' });
-    }
-
-    try {
-      // fetch follows redirects automatically (mode: 'follow' is default)
-      const imageRes = await fetch(url);
-
-      // Check if response is actually an image (not HTML error page)
-      const contentType = imageRes.headers.get('content-type') || '';
-      if (!contentType.startsWith('image/')) {
-        // Pollinations returned HTML (error page or redirect page) instead of an image
-        return res.status(502).json({
-          success: false,
-          message: 'Pollinations returned an error page instead of an image. Try a different prompt.',
-          hint: 'Try simplifying your prompt or waiting a moment before retrying.',
-        });
-      }
-
-      const imageBuffer = await imageRes.arrayBuffer();
-
-      res.set({
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
-
-      return res.status(200).send(Buffer.from(imageBuffer));
-    } catch (err) {
-      console.error('Proxy image error:', err);
-      return res.status(500).json({ success: false, message: 'Proxy error: ' + err.message });
-    }
   }
 
   // Goal Tracker

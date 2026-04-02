@@ -3,11 +3,11 @@ import { Sparkles, Copy, Check, RefreshCw, MessageSquare, Mail, FileText, Zap, D
 import Layout from '../components/Layout';
 import apiService from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jobrobotsaii.vercel.app/api';
-
-// Proxy image through our backend to avoid browser CORS block on Pollinations CDN
-const proxyImageUrl = (url) =>
-  `${API_BASE_URL}/ai/proxy-image?url=${encodeURIComponent(url)}`;
+// Pollinations CDN URLs are CORS-enabled — load directly with cache-busting
+const getImageSrc = (url) => {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
+};
 
 const AITools = () => {
   const [activeTab, setActiveTab] = useState('answer');
@@ -36,7 +36,6 @@ const AITools = () => {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
-  const [imageFetching, setImageFetching] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
 
   const handleCopy = () => {
@@ -110,10 +109,12 @@ const AITools = () => {
 
   const generateImage = async () => {
     if (!imagePrompt.trim()) return;
+
+    // Reset all image states before starting
     setImageLoading(true);
     setImageError('');
-    setImageFetching(false);
     setImageLoadError(false);
+    setGeneratedImage(null);
 
     try {
       const [width, height] = imageSize.split('x').map(Number);
@@ -131,12 +132,11 @@ const AITools = () => {
           prompt: response.data.prompt,
           seed: response.data.seed,
         });
-        setImageFetching(true);
       } else {
-        setImageError('Unexpected response: ' + JSON.stringify(response));
+        setImageError(response.message || 'Unexpected error. Please try again.');
       }
     } catch (error) {
-      setImageError(error.message || 'Failed to generate image');
+      setImageError(error?.response?.data?.message || error.message || 'Failed to generate image.');
     } finally {
       setImageLoading(false);
     }
@@ -163,7 +163,6 @@ const AITools = () => {
     setGeneratedImage(null);
     setImagePrompt('');
     setImageError('');
-    setImageFetching(false);
     setImageLoadError(false);
   };
 
@@ -559,37 +558,32 @@ const AITools = () => {
                   </div>
                 </div>
                 <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px]">
-                  {/* Always render img so onLoad/onError fire */}
-                  {generatedImage && (
-                    <img
-                      src={proxyImageUrl(generatedImage.url)}
-                      alt={generatedImage.prompt}
-                      onLoad={() => { setImageFetching(false); setImageLoadError(false); }}
-                      onError={() => { setImageFetching(false); setImageLoadError(true); }}
-                      className={`w-full object-contain max-h-[512px] mx-auto transition-opacity duration-300 ${
-                        imageFetching ? 'opacity-0' : 'opacity-100'
-                      }`}
-                    />
-                  )}
-
-                  {/* Spinner overlay while loading — separate from image */}
-                  {imageFetching && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80">
+                  {/* Spinner while backend is generating the image */}
+                  {imageLoading && (
+                    <div className="flex flex-col items-center justify-center">
                       <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                      <p className="text-gray-400 text-sm">Fetching image...</p>
+                      <p className="text-gray-400 text-sm">Generating image...</p>
                     </div>
                   )}
 
-                  {/* Error state */}
-                  {imageLoadError && (
+                  {/* Image loads via <img> onLoad/onError — no fetching state needed */}
+                  {!imageLoading && generatedImage && (
+                    <img
+                      src={getImageSrc(generatedImage.url)}
+                      alt={generatedImage.prompt}
+                      onLoad={() => setImageLoadError(false)}
+                      onError={() => setImageLoadError(true)}
+                      className="w-full object-contain max-h-[512px] mx-auto"
+                    />
+                  )}
+
+                  {/* Image load failure */}
+                  {!imageLoading && imageLoadError && (
                     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                       <Image className="w-12 h-12 text-gray-600 mb-3" />
                       <p className="text-gray-400 text-sm mb-2">Image failed to load</p>
-                      <p className="text-gray-500 text-xs mb-3 break-all max-w-full px-2">
-                        {generatedImage?.url?.substring(0, 80)}...
-                      </p>
                       <button
-                        onClick={() => { setImageLoadError(false); setImageFetching(false); setImageLoading(true); generateImage(); }}
+                        onClick={() => { setImageLoadError(false); setImageLoading(true); generateImage(); }}
                         className="text-primary text-sm hover:underline"
                       >
                         Retry
@@ -597,8 +591,12 @@ const AITools = () => {
                     </div>
                   )}
                 </div>
-                <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
-                <p className="mt-1 text-gray-500 text-xs">Seed: {generatedImage.seed}</p>
+                {!imageLoading && generatedImage && (
+                  <>
+                    <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
+                    <p className="mt-1 text-gray-500 text-xs">Seed: {generatedImage.seed}</p>
+                  </>
+                )}
               </div>
             )}
 
