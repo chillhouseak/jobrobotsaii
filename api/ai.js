@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import User, { PLAN_CREDITS } from './models/User.js';
+import User from './models/User.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const authMiddleware = async (req) => {
@@ -35,19 +35,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// Paid plan check — unlimited/agency plans never run out of credits
-const isPaidPlan = (plan) => ['unlimited', 'agency'].includes(plan);
-
-// Credit deduction helper — returns { allowed, credits }.
-// Uses atomic findOneAndUpdate so concurrent requests can't bypass deduction.
-const deductCredit = async (userId, plan, amount = 1) => {
-  if (isPaidPlan(plan)) {
-    return { allowed: true, credits: -1 }; // paid plans skip deduction
-  }
-  const result = await User.deductCredit(userId, amount);
-  return { allowed: result.success, credits: result.credits };
-};
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).set(corsHeaders).send('');
@@ -68,17 +55,21 @@ export default async function handler(req, res) {
     // PUBLIC ROUTES — no authentication required
     // ============================================================
 
-    // Image Generation (Pollinations — free, no auth, no credits)
+    // Image Generation (Pollinations — free, no auth)
     if (action === 'generate-image' && method === 'POST') {
       const { prompt, width = 1024, height = 1024, seed, style } = body || {};
+
       if (!prompt || !prompt.trim()) {
         return res.status(400).json({ success: false, message: 'Prompt is required' });
       }
+
       const encodedPrompt = encodeURIComponent(prompt.trim());
       const styleParam = style && style !== 'none' ? `&model=${style}` : '';
       const seedParam = seed ? `&seed=${seed}` : '';
       const nologo = '&nologo=true';
+
       const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}${seedParam}${styleParam}${nologo}`;
+
       return res.status(200).json({
         success: true,
         data: {
@@ -91,115 +82,75 @@ export default async function handler(req, res) {
       });
     }
 
-    // Goal Tracker — free AI feature, no auth, no credits
+    // Goal Tracker — free AI feature, no auth
     if ((action === 'goal-tracker' || action === 'generate-goal') && method === 'POST') {
       const { goal, role, timeframe, obstacles } = body || {};
-      if (!goal) return res.status(400).json({ success: false, message: 'Goal is required' });
+
+      if (!goal) {
+        return res.status(400).json({ success: false, message: 'Goal is required' });
+      }
+
       const prompt = `You are an AI career advisor helping a ${role || 'professional'} create an actionable goal plan.\n\nGoal: ${goal}\nTimeframe: ${timeframe || '3 months'}\nPotential Obstacles: ${obstacles || 'Limited time, resource constraints'}\n\nCreate a detailed, actionable plan with milestones, weekly tasks, and success metrics. Be specific and practical.`;
       const result = await callGemini(prompt);
+
       return res.status(200).json({ success: true, data: { result } });
     }
 
-    // Resume Tailor — free AI feature, no auth, no credits
+    // Resume Tailor — free AI feature, no auth
     if (action === 'tailor-resume' && method === 'POST') {
       const { resume, jobDescription, targetRole } = body || {};
+
       if (!resume || !jobDescription) {
         return res.status(400).json({ success: false, message: 'Resume and job description are required' });
       }
+
       const prompt = `You are a professional resume writer. Tailor the following resume for the job description.\n\nResume:\n${resume}\n\nJob Description:\n${jobDescription}\n\nTarget Role: ${targetRole || 'the role above'}\n\nRewrite the resume to highlight the most relevant skills and experience. Keep it concise (max 2 pages). Use action verbs and quantify achievements where possible. Return the tailored resume in clean markdown format.`;
       const tailoredResume = await callGemini(prompt);
+
       return res.status(200).json({ success: true, data: { tailoredResume } });
     }
 
     // ============================================================
-    // PROTECTED ROUTES — authentication + credits required
+    // PROTECTED ROUTES — authentication required
     // ============================================================
     const decoded = await authMiddleware(req);
     const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (user.status !== 'active') {
-      return res.status(403).json({ success: false, message: 'Account is not active' });
-    }
+    if (user.status !== 'active') return res.status(403).json({ success: false, message: 'Account is not active' });
 
-    // Status — returns current credits and plan info
-    if (action === 'status' && method === 'GET') {
-      return res.status(200).json({
-        success: true,
-        data: {
-          credits: user.aiCredits,
-          plan: user.plan,
-          planCredits: PLAN_CREDITS[user.plan] || 0,
-          isPaidPlan: isPaidPlan(user.plan),
-          resumesRemaining: isPaidPlan(user.plan) ? 999 : user.aiCredits
-        }
-      });
-    }
-
-    // Credits Check — lightweight endpoint for UI to poll before rendering
-    if (action === 'check-credits' && method === 'GET') {
-      return res.status(200).json({
-        success: true,
-        data: { credits: user.aiCredits, plan: user.plan, isPaidPlan: isPaidPlan(user.plan) }
-      });
-    }
-
-    // Answer Generator — deducts 1 credit
+    // Answer Generator
     if (action === 'answer' && method === 'POST') {
-      const { allowed, credits } = await deductCredit(user._id, user.plan, 1);
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          message: 'Your free plan has finished.',
-          credits: 0
-        });
-      }
+      if (user.aiCredits <= 0) return res.status(403).json({ success: false, message: 'No AI credits remaining' });
       const { question, role, tone, length } = body || {};
       const prompt = `You are an AI assistant helping a ${role || 'professional'} prepare for job interviews.\n\nQuestion: ${question}\n\nGenerate a ${tone || 'professional'} answer that is ${length || 'medium'} in length.\n\nProvide a clear, concise response that addresses the question effectively.`;
       const answer = await callGemini(prompt);
-      return res.status(200).json({
-        success: true,
-        data: { answer, creditsRemaining: credits }
-      });
+      await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
+      return res.status(200).json({ success: true, data: { answer, creditsRemaining: user.aiCredits - 1 } });
     }
 
-    // Cover Letter — deducts 1 credit
+    // Status
+    if (action === 'status' && method === 'GET') {
+      return res.status(200).json({ success: true, data: { credits: user.aiCredits, plan: user.plan, resumesRemaining: user.plan === 'free' ? 1 : 999 } });
+    }
+
+    // Cover Letter
     if (action === 'cover-letter' && method === 'POST') {
-      const { allowed, credits } = await deductCredit(user._id, user.plan, 1);
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          message: 'Your free plan has finished.',
-          credits: 0
-        });
-      }
+      if (user.aiCredits <= 0) return res.status(403).json({ success: false, message: 'No AI credits remaining' });
       const { company, role, jobDescription, experience } = body || {};
       const prompt = `Write a professional cover letter.\n\nCompany: ${company}\nRole: ${role}\nJob Description: ${jobDescription}\nYour Experience: ${experience}\n\nMake it compelling and tailored to the role.`;
       const coverLetter = await callGemini(prompt);
-      // Also increment resumeGenerations counter
-      await User.findByIdAndUpdate(user._id, { $inc: { resumeGenerations: 1 } });
-      return res.status(200).json({
-        success: true,
-        data: { coverLetter, creditsRemaining: credits }
-      });
+      await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 }, $inc: { resumeGenerations: 1 } });
+      return res.status(200).json({ success: true, data: { coverLetter, creditsRemaining: user.aiCredits - 1 } });
     }
 
-    // Outreach — deducts 1 credit
+    // Outreach
     if (action === 'outreach' && method === 'POST') {
-      const { allowed, credits } = await deductCredit(user._id, user.plan, 1);
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          message: 'Your free plan has finished.',
-          credits: 0
-        });
-      }
+      if (user.aiCredits <= 0) return res.status(403).json({ success: false, message: 'No AI credits remaining' });
       const { type, recipientName, recipientRole, company, yourBackground, targetRole } = body || {};
       const prompt = `Write a ${type || 'professional'} message.\n\nRecipient: ${recipientName || 'Hiring Manager'}\nRole: ${recipientRole || ''}\nCompany: ${company}\nYour Background: ${yourBackground}\nTarget Role: ${targetRole}\n\nKeep it concise and engaging.`;
       const message = await callGemini(prompt);
-      return res.status(200).json({
-        success: true,
-        data: { message, creditsRemaining: credits }
-      });
+      await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
+      return res.status(200).json({ success: true, data: { message, creditsRemaining: user.aiCredits - 1 } });
     }
 
     return res.status(404).json({ success: false, message: 'Route not found' });

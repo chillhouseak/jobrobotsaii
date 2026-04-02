@@ -1,16 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Sparkles, Copy, Check, RefreshCw, MessageSquare, Mail, FileText, Zap, Download, Loader2, Image, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Sparkles, Copy, Check, RefreshCw, MessageSquare, Mail, FileText, Zap, Download, Loader2, Image } from 'lucide-react';
 import Layout from '../components/Layout';
 import apiService from '../services/api';
 
 const AITools = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('answer');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [credits, setCredits] = useState(null);
-  const [creditError, setCreditError] = useState('');
 
   const [answerForm, setAnswerForm] = useState({
     question: '', role: '', tone: 'professional', length: 'medium'
@@ -35,22 +31,6 @@ const AITools = () => {
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
 
-  // Fetch credits on mount
-  useEffect(() => {
-    const fetchCredits = async () => {
-      try {
-        const res = await apiService.checkCredits();
-        if (res.success) setCredits(res.data);
-      } catch {
-        // Non-critical — don't block the UI
-      }
-    };
-    fetchCredits();
-  }, []);
-
-  const isPaidPlan = credits?.isPaidPlan;
-  const creditsExhausted = credits !== null && !isPaidPlan && credits.credits <= 0;
-
   const handleCopy = () => {
     const text = answerOutput || outreachOutput || coverOutput;
     navigator.clipboard.writeText(text);
@@ -61,7 +41,6 @@ const AITools = () => {
   const generateAnswer = async () => {
     if (!answerForm.question) return;
     setIsGenerating(true);
-    setCreditError('');
 
     try {
       const response = await apiService.generateAnswer(
@@ -72,26 +51,16 @@ const AITools = () => {
       );
       if (response.success) {
         setAnswerOutput(response.data.answer);
-        if (response.data.creditsRemaining !== undefined) {
-          setCredits((prev) => prev ? { ...prev, credits: response.data.creditsRemaining } : prev);
-        }
       }
     } catch (error) {
-      if (error.message?.includes('free plan has finished')) {
-        setCreditError('Your free plan has finished.');
-        setCredits((prev) => prev ? { ...prev, credits: 0 } : prev);
-      } else {
-        setCreditError(error.message || 'Something went wrong.');
-      }
-    } finally {
-      setIsGenerating(false);
+      console.error('Error generating answer:', error);
     }
+    setIsGenerating(false);
   };
 
   const generateOutreach = async () => {
     if (!outreachForm.recipientName) return;
     setIsGenerating(true);
-    setCreditError('');
 
     try {
       const response = await apiService.generateOutreach(
@@ -104,26 +73,16 @@ const AITools = () => {
       );
       if (response.success) {
         setOutreachOutput(response.data.message);
-        if (response.data.creditsRemaining !== undefined) {
-          setCredits((prev) => prev ? { ...prev, credits: response.data.creditsRemaining } : prev);
-        }
       }
     } catch (error) {
-      if (error.message?.includes('free plan has finished')) {
-        setCreditError('Your free plan has finished.');
-        setCredits((prev) => prev ? { ...prev, credits: 0 } : prev);
-      } else {
-        setCreditError(error.message || 'Something went wrong.');
-      }
-    } finally {
-      setIsGenerating(false);
+      console.error('Error generating outreach:', error);
     }
+    setIsGenerating(false);
   };
 
   const generateCover = async () => {
     if (!coverForm.company || !coverForm.role) return;
     setIsGenerating(true);
-    setCreditError('');
 
     try {
       const response = await apiService.generateCoverLetter(
@@ -134,20 +93,11 @@ const AITools = () => {
       );
       if (response.success) {
         setCoverOutput(response.data.coverLetter);
-        if (response.data.creditsRemaining !== undefined) {
-          setCredits((prev) => prev ? { ...prev, credits: response.data.creditsRemaining } : prev);
-        }
       }
     } catch (error) {
-      if (error.message?.includes('free plan has finished')) {
-        setCreditError('Your free plan has finished.');
-        setCredits((prev) => prev ? { ...prev, credits: 0 } : prev);
-      } else {
-        setCreditError(error.message || 'Something went wrong.');
-      }
-    } finally {
-      setIsGenerating(false);
+      console.error('Error generating cover letter:', error);
     }
+    setIsGenerating(false);
   };
 
   const generateImage = async () => {
@@ -211,61 +161,12 @@ const AITools = () => {
     <Layout>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-white mb-1 flex items-center space-x-2">
-                <Sparkles className="w-6 h-6 text-primary-light" />
-                <span>AI Tools</span>
-              </h1>
-              <p className="text-gray-400 text-sm">Powerful AI tools to supercharge your job search</p>
-            </div>
-
-            {/* Credits Display */}
-            {credits && (
-              <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border ${
-                credits.isPaidPlan
-                  ? 'bg-purple-500/10 border-purple-500/30'
-                  : credits.credits <= 0
-                  ? 'bg-red-500/10 border-red-500/30'
-                  : 'bg-white/5 border-white/10'
-              }`}>
-                <Sparkles className={`w-4 h-4 ${
-                  credits.isPaidPlan ? 'text-purple-400' : credits.credits <= 0 ? 'text-red-400' : 'text-primary-light'
-                }`} />
-                <span className="text-sm font-medium text-gray-300">
-                  {credits.isPaidPlan
-                    ? `${credits.plan.charAt(0).toUpperCase() + credits.plan.slice(1)} Plan — Unlimited`
-                    : `${credits.credits} credit${credits.credits !== 1 ? 's' : ''} remaining`}
-                </span>
-                {!credits.isPaidPlan && credits.credits <= 0 && (
-                  <button
-                    onClick={() => navigate('/upgrade')}
-                    className="ml-1 text-xs px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    Upgrade
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Credit Exhausted Banner */}
-          {creditError && (
-            <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-              <div className="flex-1">
-                <p className="text-red-400 text-sm font-medium">Your free plan has finished.</p>
-                <p className="text-red-400/70 text-xs mt-0.5">Upgrade to a paid plan to continue using AI tools.</p>
-              </div>
-              <button
-                onClick={() => navigate('/upgrade')}
-                className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-colors"
-              >
-                Upgrade Plan
-              </button>
-            </div>
-          )}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-white mb-2 flex items-center space-x-2">
+            <Sparkles className="w-6 h-6 text-primary-light" />
+            <span>AI Tools</span>
+          </h1>
+          <p className="text-gray-400">Powerful AI tools to supercharge your job search</p>
         </div>
 
         {/* Tabs */}
@@ -346,7 +247,7 @@ const AITools = () => {
                 </div>
                 <button
                   onClick={generateAnswer}
-                  disabled={isGenerating || !answerForm.question || creditsExhausted}
+                  disabled={isGenerating || !answerForm.question}
                   className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
                   {isGenerating ? (
@@ -473,8 +374,8 @@ const AITools = () => {
                 </div>
                 <button
                   onClick={generateOutreach}
-                  disabled={isGenerating || creditsExhausted}
-                  className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
+                  disabled={isGenerating}
+                  className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2"
                 >
                   <Zap className="w-4 h-4" />
                   <span>Generate {outreachType === 'followup' ? 'Follow-up' : outreachType}</span>
@@ -711,7 +612,7 @@ const AITools = () => {
                 </div>
                 <button
                   onClick={generateCover}
-                  disabled={isGenerating || !coverForm.company || !coverForm.role || creditsExhausted}
+                  disabled={isGenerating || !coverForm.company || !coverForm.role}
                   className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
                   <Zap className="w-4 h-4" />

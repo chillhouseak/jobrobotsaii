@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
   subscriptionEndDate: { type: Date, default: null },
   stripeCustomerId: { type: String, default: null },
   launchpadCustomerId: { type: String, default: null },
-  aiCredits: { type: Number, default: 100 },
+  aiCredits: { type: Number, default: 10 },
   resumeGenerations: { type: Number, default: 0 },
   interviewSessions: { type: Number, default: 0 },
 
@@ -66,19 +66,18 @@ userSchema.methods.reactivate = async function() {
   return this.save();
 };
 
-// Plan credit limits — new users start at 100 credits
-export const PLAN_CREDITS = {
-  free: 100,
-  standard: 500,
-  unlimited: 999999,
-  agency: 999999
+const planLimits = {
+  free: { aiCredits: 10 },
+  standard: { aiCredits: 50 },
+  unlimited: { aiCredits: 999999 },
+  agency: { aiCredits: 999999 }
 };
 
 userSchema.methods.upgradePlan = async function(plan, subscriptionEndDate = null) {
   this.plan = plan;
   this.status = 'active';
   this.subscriptionEndDate = subscriptionEndDate;
-  if (PLAN_CREDITS[plan] !== undefined) this.aiCredits = PLAN_CREDITS[plan];
+  if (planLimits[plan]) this.aiCredits = planLimits[plan].aiCredits;
   return this.save();
 };
 
@@ -92,23 +91,6 @@ userSchema.methods.toJSON = function() {
   const obj = this.toObject();
   delete obj.password;
   return obj;
-};
-
-// Concurrency-safe credit deduction — uses findOneAndUpdate to prevent race conditions
-userSchema.statics.deductCredit = async function(userId, creditsToDeduct = 1, log = true) {
-  const result = await this.findOneAndUpdate(
-    { _id: userId, aiCredits: { $gte: creditsToDeduct } },
-    { $inc: { aiCredits: -creditsToDeduct } },
-    { new: true }
-  );
-  if (!result) {
-    const user = await this.findById(userId);
-    return { success: false, credits: user ? user.aiCredits : 0 };
-  }
-  if (log) {
-    console.log(`[CREDIT] Deducted ${creditsToDeduct} from user ${userId}. Remaining: ${result.aiCredits}`);
-  }
-  return { success: true, credits: result.aiCredits };
 };
 
 const User = mongoose.model('User', userSchema);
