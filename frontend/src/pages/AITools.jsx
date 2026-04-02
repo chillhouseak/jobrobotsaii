@@ -559,26 +559,26 @@ const AITools = () => {
                   </div>
                 </div>
                 <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px]">
-                  {/* Fetching from Pollinations CDN */}
-                  {imageFetching && !imageLoadError && (
+                  {/* Show spinner while fetching image from proxy */}
+                  {imageFetching && (
                     <div className="flex flex-col items-center justify-center py-8">
                       <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
                       <p className="text-gray-400 text-sm">Fetching image...</p>
                     </div>
                   )}
 
-                  {/* Image loaded successfully */}
+                  {/* Show image once loaded */}
                   {!imageFetching && !imageLoadError && generatedImage && (
                     <img
                       src={proxyImageUrl(generatedImage.url)}
                       alt={generatedImage.prompt}
-                      onLoad={() => setImageLoadError(false)}
-                      onError={() => setImageLoadError(true)}
+                      onLoad={() => { setImageFetching(false); setImageLoadError(false); }}
+                      onError={() => { setImageFetching(false); setImageLoadError(true); }}
                       className="w-full object-contain max-h-[512px] mx-auto"
                     />
                   )}
 
-                  {/* Image failed to load */}
+                  {/* Show error if image failed to load */}
                   {imageLoadError && (
                     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                       <Image className="w-12 h-12 text-gray-600 mb-3" />
