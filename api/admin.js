@@ -91,6 +91,36 @@ export default async function handler(req, res) {
       });
     }
 
+    // Get single user
+    if (action?.match(/^users\/[a-f0-9]{24}$/) && method === 'GET') {
+      await adminAuth(req);
+      const userId = action.split('/')[1];
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(200).json({ success: true, data: { user } });
+    }
+
+    // Suspend / reactivate user
+    if (action?.match(/^users\/[a-f0-9]{24}\/suspend$/) && method === 'PUT') {
+      await adminAuth(req);
+      const userId = action.split('/')[1];
+      const { suspend } = body || {};
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+      user.status = suspend ? 'suspended' : 'active';
+      await user.save();
+      return res.status(200).json({ success: true, message: suspend ? 'User suspended' : 'User reactivated', data: { user } });
+    }
+
+    // Delete user
+    if (action?.match(/^users\/[a-f0-9]{24}$/) && method === 'DELETE') {
+      await adminAuth(req);
+      const userId = action.split('/')[1];
+      const user = await User.findByIdAndDelete(userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(200).json({ success: true, message: 'User deleted' });
+    }
+
     // Analytics
     if (action === 'analytics' && method === 'GET') {
       await adminAuth(req);
