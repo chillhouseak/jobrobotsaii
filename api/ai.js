@@ -106,7 +106,7 @@ export default async function handler(req, res) {
   // PUBLIC ROUTES
   // ============================================================
 
-  // Image Generation — validates Pollinations is not rate-limited before returning URL
+  // Image Generation — returns fully-constructed image URL
   if (action === 'generate-image' && method === 'POST') {
     const prompt = body?.prompt?.trim();
     const width = parseInt(body?.width) || 1024;
@@ -121,25 +121,8 @@ export default async function handler(req, res) {
     const seed = Math.floor(Math.random() * 999999999);
     const encoded = encodeURIComponent(prompt);
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&seed=${seed}${styleParam}&nologo=true`;
-
-    // Pre-check: validate Pollinations is not rate-limited before returning URL
-    try {
-      const pollnResponse = await fetch(imageUrl, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000),
-      });
-      const contentType = pollnResponse.headers.get('content-type') || '';
-      if (!contentType.startsWith('image/')) {
-        res.setHeader('Content-Type', 'application/json');
-        return res.status(429).json({
-          success: false,
-          message: 'Pollinations server is busy. Please wait a few seconds and try again.',
-        });
-      }
-    } catch (fetchErr) {
-      console.warn('[AI] Pollinations pre-check failed:', fetchErr.message);
-    }
+    // noqueue=true: don't block queue, fail fast if server is busy
+    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&seed=${seed}${styleParam}&nologo=true&noqueue=true`;
 
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
