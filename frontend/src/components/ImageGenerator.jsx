@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import apiService from '../services/api';
 
-const IMAGE_TIMEOUT = 30000; // 30s — ONLY legitimate error trigger
+const IMAGE_TIMEOUT = 60000; // 60s — give Pollinations more time
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -60,10 +60,7 @@ const ImageGenerator = () => {
         throw new Error(response.message || 'Failed to generate image');
       }
 
-      // Backend returns the complete, fully-constructed image URL
-      // Frontend does NOT build the URL — avoids any URL construction bugs
       const { imageUrl, seed, prompt: savedPrompt } = response.data;
-
       setGeneratedImage({ url: imageUrl, seed, prompt: savedPrompt });
       setIsGenerating(false);
       startSafetyTimeout();
@@ -73,7 +70,6 @@ const ImageGenerator = () => {
     }
   };
 
-  // onLoad is the ONLY success signal
   const handleImageLoad = () => {
     clearSafetyTimeout();
     setImageLoaded(true);
@@ -82,11 +78,9 @@ const ImageGenerator = () => {
 
   const retryImage = () => {
     if (!generatedImage) return;
-
     clearSafetyTimeout();
     setImageError(false);
     setImageLoaded(false);
-    // Backend returns fresh URL on retry
     startSafetyTimeout();
   };
 
@@ -221,6 +215,7 @@ const ImageGenerator = () => {
           </div>
 
           <div className="rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[320px] relative">
+            {/* Loading skeleton — visible on top of the image */}
             {!imageLoaded && !imageError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <div className="w-full max-w-sm px-8 animate-pulse">
@@ -248,13 +243,22 @@ const ImageGenerator = () => {
               </div>
             )}
 
+            {/*
+              CRITICAL: <img> is ALWAYS visible — NOT display:none.
+              Browsers skip loading images with display:none.
+              The skeleton overlay covers the image while loading.
+              Once onLoad fires, imageLoaded=true and skeleton disappears.
+            */}
             <img
               key={generatedImage.url}
               src={generatedImage.url}
               alt={generatedImage.prompt}
               onLoad={handleImageLoad}
-              className="w-full object-contain max-h-[512px] mx-auto"
-              style={{ display: imageLoaded ? 'block' : 'none' }}
+              className="w-full object-contain max-h-[512px] mx-auto transition-opacity duration-300"
+              style={{
+                opacity: imageLoaded ? 1 : 0,
+                filter: imageLoaded ? 'none' : 'blur(8px)',
+              }}
             />
           </div>
 
