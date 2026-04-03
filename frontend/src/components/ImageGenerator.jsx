@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import { Sparkles, Download, RefreshCw, Loader2, AlertCircle, Image } from 'lucide-react';
 import apiService from '../services/api';
 
-const MAX_RETRIES = 5;
-const BASE_DELAY = 1000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1500;
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -73,26 +73,25 @@ const ImageGenerator = () => {
     }
   };
 
-  // Retry with exponential backoff when image fails to load
+  // Retry with fixed delay and cache busting
   const retryImage = () => {
     if (retryCount.current >= MAX_RETRIES) {
-      setError('Image generation timed out. Please try again.');
+      setError('Image took too long. Please try again.');
       setImageLoading(false);
       return;
     }
 
     retryCount.current += 1;
-    const delay = BASE_DELAY * Math.pow(2, retryCount.current - 1);
 
     retryTimeout.current = setTimeout(() => {
       if (generatedImage) {
-        // Reload with fresh cache-busted URL
+        // Cache bust with retry count to force fresh request
         setGeneratedImage((prev) => ({
           ...prev,
-          url: buildImageUrl(prev.seed),
+          url: `${prev.url.split('&t=')[0]}&retry=${retryCount.current}&t=${Date.now()}`,
         }));
       }
-    }, delay);
+    }, RETRY_DELAY);
   };
 
   const handleImageLoad = () => {
