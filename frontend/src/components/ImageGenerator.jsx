@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { Sparkles, Download, RefreshCw, Loader2, AlertCircle, Image } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Sparkles, Download, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import apiService from '../services/api';
+
+const LOAD_DELAY = 2500; // 2.5s delay before loading image
+const MAX_RETRIES = 1;   // Only 1 retry on failure
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -11,6 +14,9 @@ const ImageGenerator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [error, setError] = useState('');
+
+  const retryCount = useRef(0);
+  const delayTimer = useRef(null);
 
   const buildImageUrl = (seed) => {
     const encoded = encodeURIComponent(prompt.trim());
@@ -24,6 +30,13 @@ const ImageGenerator = () => {
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
+    // Clear any pending timers
+    if (delayTimer.current) {
+      clearTimeout(delayTimer.current);
+      delayTimer.current = null;
+    }
+
+    retryCount.current = 0;
     setIsGenerating(true);
     setError('');
     setHasError(false);
@@ -46,10 +59,10 @@ const ImageGenerator = () => {
         setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
         setIsGenerating(false);
 
-        // Small delay before loading — gives Pollinations time to render
-        setTimeout(() => {
+        // Delay before loading — avoids hitting Pollinations while it's still generating
+        delayTimer.current = setTimeout(() => {
           setIsLoading(true);
-        }, 1500);
+        }, LOAD_DELAY);
       } else {
         setError(response.message || 'Failed to generate image');
         setIsGenerating(false);
@@ -61,13 +74,34 @@ const ImageGenerator = () => {
   };
 
   const handleImageLoad = () => {
+    retryCount.current = 0;
     setIsLoading(false);
     setHasError(false);
   };
 
   const handleImageError = () => {
+    if (retryCount.current >= MAX_RETRIES) {
+      // Retried once and still failed — show friendly message
+      setIsLoading(false);
+      setHasError(true);
+      setError('Server busy, please try again in a moment.');
+      return;
+    }
+
+    // Retry once after delay
+    retryCount.current += 1;
     setIsLoading(false);
-    setHasError(true);
+
+    delayTimer.current = setTimeout(() => {
+      if (generatedImage) {
+        setGeneratedImage((prev) => ({
+          ...prev,
+          // Cache-bust with fresh timestamp
+          url: `${prev.url.split('&t=')[0]}&t=${Date.now()}`,
+        }));
+        setIsLoading(true);
+      }
+    }, LOAD_DELAY);
   };
 
   const downloadImage = () => {
@@ -81,6 +115,8 @@ const ImageGenerator = () => {
   };
 
   const reset = () => {
+    if (delayTimer.current) clearTimeout(delayTimer.current);
+    retryCount.current = 0;
     setPrompt('');
     setGeneratedImage(null);
     setIsLoading(false);
@@ -195,29 +231,32 @@ const ImageGenerator = () => {
             {isLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                <p className="text-gray-400 text-sm">Loading image...</p>
+                <p className="text-gray-400 text-sm">
+                  Loading image...{retryCount.current > 0 && ` (1 retry)`}
+                </p>
               </div>
             )}
 
             {hasError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <Image className="w-12 h-12 text-gray-600 mb-3" />
-                <p className="text-gray-400 text-sm mb-3">Image failed to load</p>
+                <AlertCircle className="w-12 h-12 text-yellow-500 mb-3" />
+                <p className="text-yellow-400 text-sm mb-3">{error}</p>
                 <button onClick={generateImage} className="text-primary text-sm hover:underline">
                   Try again
                 </button>
               </div>
             )}
 
-            <img
-              key={generatedImage.url}
-              src={`${generatedImage.url}&t=${Date.now()}`}
-              alt={generatedImage.prompt}
-              onLoad={handleImageLoad}
-              onError={handleImageError}
-              className="w-full object-contain max-h-[512px] mx-auto"
-              style={{ display: hasError ? 'none' : 'block' }}
-            />
+            {!hasError && (
+              <img
+                key={generatedImage.url}
+                src={`${generatedImage.url}&t=${Date.now()}`}
+                alt={generatedImage.prompt}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                className="w-full object-contain max-h-[512px] mx-auto"
+              />
+            )}
           </div>
 
           <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
