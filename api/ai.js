@@ -138,6 +138,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, data: { credits: user.aiCredits, plan: user.plan, provider: GROQ_API_KEY ? 'groq' : HF_API_KEY ? 'huggingface' : 'mock' } });
     }
 
+    // Deduct credits for image generation (or other AI operations)
+    if (action === 'use-image-credit' && method === 'POST') {
+      const { creditsToUse } = body || {};
+      const amount = parseInt(creditsToUse) || 5;
+
+      if (user.aiCredits < amount) {
+        return res.status(403).json({ success: false, message: 'Insufficient credits' });
+      }
+
+      const updated = await User.findByIdAndUpdate(
+        decoded.id,
+        { $inc: { aiCredits: -amount } },
+        { new: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: { creditsRemaining: updated.aiCredits },
+      });
+    }
+
     if (action === 'answer' && method === 'POST') {
       const { question, role, tone, length } = body || {};
       if (!question) return res.status(400).json({ success: false, message: 'Question required' });

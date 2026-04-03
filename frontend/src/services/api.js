@@ -149,6 +149,13 @@ class ApiService {
     });
   }
 
+  async useImageCredit(creditsToUse) {
+    return this.request('/ai/use-image-credit', {
+      method: 'POST',
+      body: JSON.stringify({ creditsToUse }),
+    });
+  }
+
   async tailorResume(resume, jobDescription, targetRole) {
     return this.request('/ai/tailor-resume', {
       method: 'POST',
