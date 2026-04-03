@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Sparkles, Copy, Check, MessageSquare, Mail, FileText, Zap, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, Copy, Check, MessageSquare, Mail, FileText, Zap, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import apiService from '../services/api';
-import ImageGenerator from '../components/ImageGenerator';
 
 const AITools = () => {
   const [activeTab, setActiveTab] = useState('answer');
@@ -98,7 +97,6 @@ const AITools = () => {
     { id: 'answer', label: 'Answer Generator', icon: MessageSquare },
     { id: 'outreach', label: 'Cold Outreach', icon: Mail },
     { id: 'cover', label: 'Cover Letter', icon: FileText },
-    { id: 'image', label: 'Image Generator', icon: ImageIcon },
   ];
 
   return (
@@ -452,8 +450,6 @@ const AITools = () => {
             </div>
           </div>
         )}
-        {/* Image Generator */}
-        {activeTab === 'image' && <ImageGenerator />}
       </div>
     </Layout>
   );
