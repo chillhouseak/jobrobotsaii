@@ -108,25 +108,30 @@ export default async function handler(req, res) {
 
   // Image Generation — returns URL only, frontend loads it
   if (action === 'generate-image' && method === 'POST') {
-    const { prompt, width = 1024, height = 1024, seed, style } = body || {};
+    const prompt = body?.prompt?.trim();
+    const width = parseInt(body?.width) || 1024;
+    const height = parseInt(body?.height) || 1024;
+    const seed = parseInt(body?.seed) || Math.floor(Math.random() * 999999999);
+    const style = body?.style;
 
-    if (!prompt?.trim()) {
+    if (!prompt) {
+      res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ success: false, message: 'Prompt is required' });
     }
 
-    const encoded = encodeURIComponent(prompt.trim());
+    const encoded = encodeURIComponent(prompt);
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
-    const seedParam = seed ? `&seed=${seed}` : '';
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}${seedParam}${styleParam}&nologo=true`;
+    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&seed=${seed}${styleParam}&nologo=true`;
 
+    res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
       success: true,
       data: {
         imageUrl,
-        prompt: prompt.trim(),
+        prompt,
         width,
         height,
-        seed: seed || Math.floor(Math.random() * 999999999),
+        seed,
       },
     });
   }

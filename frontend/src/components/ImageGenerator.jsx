@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Sparkles, Download, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import apiService from '../services/api';
 
-const LOAD_DELAY = 3000;
+const LOAD_DELAY = 5000;
 const MAX_RETRIES = 1;
 
 const ImageGenerator = () => {
@@ -62,7 +62,7 @@ const ImageGenerator = () => {
         setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
         setIsGenerating(false);
 
-        // Delay before showing image — gives Pollinations time to render
+        // Give Pollinations time to render the image
         loadTimer.current = setTimeout(() => {
           setIsLoading(true);
         }, LOAD_DELAY);
@@ -96,12 +96,11 @@ const ImageGenerator = () => {
     retryCount.current += 1;
     setIsLoading(false);
 
+    // Retry with a fresh URL using the same seed
     retryTimer.current = setTimeout(() => {
-      if (generatedImage) {
-        const freshUrl = buildImageUrl(generatedImage.seed);
-        setGeneratedImage((prev) => ({ ...prev, url: freshUrl }));
-        setIsLoading(true);
-      }
+      const freshUrl = buildImageUrl(generatedImage.seed);
+      setGeneratedImage((prev) => ({ ...prev, url: freshUrl }));
+      setIsLoading(true);
     }, LOAD_DELAY);
   };
 
@@ -233,7 +232,7 @@ const ImageGenerator = () => {
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
                 <p className="text-gray-400 text-sm">
-                  {retryCount.current === 0 ? 'Loading image...' : `Retrying... (${retryCount.current}/${MAX_RETRIES})`}
+                  {retryCount.current === 0 ? 'Loading image...' : `Retrying (${retryCount.current}/${MAX_RETRIES})...`}
                 </p>
               </div>
             )}
