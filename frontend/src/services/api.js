@@ -156,13 +156,6 @@ class ApiService {
     });
   }
 
-  async generateImage(prompt, width, height, seed, style) {
-    return this.request('/ai/generate-image', {
-      method: 'POST',
-      body: JSON.stringify({ prompt, width, height, seed, style }),
-    });
-  }
-
   async forgotPassword(email) {
     return this.request('/auth/forgot-password', {
       method: 'POST',

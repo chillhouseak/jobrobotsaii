@@ -1,13 +1,7 @@
 import { useState } from 'react';
-import { Sparkles, Copy, Check, RefreshCw, MessageSquare, Mail, FileText, Zap, Download, Loader2, Image } from 'lucide-react';
+import { Sparkles, Copy, Check, MessageSquare, Mail, FileText, Zap, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import apiService from '../services/api';
-
-// Pollinations CDN URLs are CORS-enabled — load directly with cache-busting
-const getImageSrc = (url) => {
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}t=${Date.now()}`;
-};
 
 const AITools = () => {
   const [activeTab, setActiveTab] = useState('answer');
@@ -29,14 +23,6 @@ const AITools = () => {
     company: '', role: '', jobDescription: '', experience: ''
   });
   const [coverOutput, setCoverOutput] = useState('');
-
-  const [imagePrompt, setImagePrompt] = useState('');
-  const [imageStyle, setImageStyle] = useState('none');
-  const [imageSize, setImageSize] = useState('1024x1024');
-  const [generatedImage, setGeneratedImage] = useState(null);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [imageError, setImageError] = useState('');
-  const [imageLoadError, setImageLoadError] = useState(false);
 
   const handleCopy = () => {
     const text = answerOutput || outreachOutput || coverOutput;
@@ -107,70 +93,10 @@ const AITools = () => {
     setIsGenerating(false);
   };
 
-  const generateImage = async () => {
-    if (!imagePrompt.trim()) return;
-
-    // Reset all image states before starting
-    setImageLoading(true);
-    setImageError('');
-    setImageLoadError(false);
-    setGeneratedImage(null);
-
-    try {
-      const [width, height] = imageSize.split('x').map(Number);
-      const response = await apiService.generateImage(
-        imagePrompt.trim(),
-        width,
-        height,
-        null,
-        imageStyle
-      );
-
-      if (response.success && response.data?.imageUrl) {
-        setGeneratedImage({
-          url: response.data.imageUrl,
-          prompt: response.data.prompt,
-          seed: response.data.seed,
-        });
-      } else {
-        setImageError(response.message || 'Unexpected error. Please try again.');
-      }
-    } catch (error) {
-      setImageError(error?.response?.data?.message || error.message || 'Failed to generate image.');
-    } finally {
-      setImageLoading(false);
-    }
-  };
-
-  const downloadImage = async (imageUrl) => {
-    try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `jobrobots-ai-${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
-  };
-
-  const resetImage = () => {
-    setGeneratedImage(null);
-    setImagePrompt('');
-    setImageError('');
-    setImageLoadError(false);
-  };
-
   const tabs = [
     { id: 'answer', label: 'Answer Generator', icon: MessageSquare },
     { id: 'outreach', label: 'Cold Outreach', icon: Mail },
     { id: 'cover', label: 'Cover Letter', icon: FileText },
-    { id: 'image', label: 'Image Generator', icon: Image },
   ];
 
   return (
@@ -289,9 +215,6 @@ const AITools = () => {
                     <button onClick={handleCopy} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     </button>
-                    <button onClick={generateAnswer} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
                   </div>
                 )}
               </div>
@@ -391,10 +314,19 @@ const AITools = () => {
                 <button
                   onClick={generateOutreach}
                   disabled={isGenerating}
-                  className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2"
+                  className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  <Zap className="w-4 h-4" />
-                  <span>Generate {outreachType === 'followup' ? 'Follow-up' : outreachType}</span>
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Generate {outreachType === 'followup' ? 'Follow-up' : outreachType}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -421,191 +353,6 @@ const AITools = () => {
                 )}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Image Generator */}
-        {activeTab === 'image' && (
-          <div className="max-w-3xl mx-auto">
-            <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
-                <Image className="w-5 h-5 text-primary-light" />
-                <span>AI Image Generator</span>
-              </h2>
-
-              {imageError && (
-                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                  <p className="text-red-400 text-sm">{imageError}</p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1.5">Describe your image</label>
-                  <textarea
-                    value={imagePrompt}
-                    onChange={(e) => setImagePrompt(e.target.value)}
-                    placeholder="A futuristic city at sunset with flying cars..."
-                    rows={4}
-                    className="input-field w-full px-4 py-3 rounded-xl text-white text-sm resize-none"
-                    disabled={imageLoading}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Style</label>
-                    <div className="relative">
-                      <select
-                        value={imageStyle}
-                        onChange={(e) => setImageStyle(e.target.value)}
-                        disabled={imageLoading}
-                        className="w-full px-4 py-3 rounded-xl text-white text-sm appearance-none cursor-pointer pr-10"
-                        style={{
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          backdropFilter: 'blur(10px)',
-                        }}
-                      >
-                        <option value="none" style={{ background: '#1a1a2e' }}>No Style</option>
-                        <option value="flux" style={{ background: '#1a1a2e' }}>Flux — Default</option>
-                        <option value="flux-realism" style={{ background: '#1a1a2e' }}>Flux — Realism</option>
-                        <option value="flux-anime" style={{ background: '#1a1a2e' }}>Flux — Anime</option>
-                        <option value="flux-canny" style={{ background: '#1a1a2e' }}>Flux — Canny</option>
-                        <option value="any-dark" style={{ background: '#1a1a2e' }}>Any — Dark</option>
-                        <option value="any-diffuse" style={{ background: '#1a1a2e' }}>Any — Diffuse</option>
-                        <option value="turbo" style={{ background: '#1a1a2e' }}>Turbo — Default</option>
-                        <option value="turbo-realism" style={{ background: '#1a1a2e' }}>Turbo — Realism</option>
-                        <option value="turbo-anime" style={{ background: '#1a1a2e' }}>Turbo — Anime</option>
-                        <option value="sdxl" style={{ background: '#1a1a2e' }}>SDXL</option>
-                        <option value="playground-v2" style={{ background: '#1a1a2e' }}>Playground V2</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Size</label>
-                    <div className="relative">
-                      <select
-                        value={imageSize}
-                        onChange={(e) => setImageSize(e.target.value)}
-                        disabled={imageLoading}
-                        className="w-full px-4 py-3 rounded-xl text-white text-sm appearance-none cursor-pointer pr-10"
-                        style={{
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          backdropFilter: 'blur(10px)',
-                        }}
-                      >
-                        <option value="1024x1024" style={{ background: '#1a1a2e' }}>Square (1024×1024)</option>
-                        <option value="1024x576" style={{ background: '#1a1a2e' }}>Landscape (1024×576)</option>
-                        <option value="768x1024" style={{ background: '#1a1a2e' }}>Portrait (768×1024)</option>
-                        <option value="512x512" style={{ background: '#1a1a2e' }}>Small (512×512)</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={generateImage}
-                  disabled={imageLoading || !imagePrompt.trim()}
-                  className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  {imageLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Generating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      <span>Generate Image</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Generated Image */}
-            {generatedImage && (
-              <div className="glass-card p-6 mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-white font-medium text-sm">Generated Image</h3>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => downloadImage(generatedImage.url)}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download</span>
-                    </button>
-                    <button
-                      onClick={resetImage}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs transition-colors"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>New</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px]">
-                  {/* Spinner while backend is generating the image */}
-                  {imageLoading && (
-                    <div className="flex flex-col items-center justify-center">
-                      <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                      <p className="text-gray-400 text-sm">Generating image...</p>
-                    </div>
-                  )}
-
-                  {/* Image loads via <img> onLoad/onError — no fetching state needed */}
-                  {!imageLoading && generatedImage && (
-                    <img
-                      src={getImageSrc(generatedImage.url)}
-                      alt={generatedImage.prompt}
-                      onLoad={() => setImageLoadError(false)}
-                      onError={() => setImageLoadError(true)}
-                      className="w-full object-contain max-h-[512px] mx-auto"
-                    />
-                  )}
-
-                  {/* Image load failure */}
-                  {!imageLoading && imageLoadError && (
-                    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                      <Image className="w-12 h-12 text-gray-600 mb-3" />
-                      <p className="text-gray-400 text-sm mb-2">Image failed to load</p>
-                      <button
-                        onClick={() => { setImageLoadError(false); setImageLoading(true); generateImage(); }}
-                        className="text-primary text-sm hover:underline"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {!imageLoading && generatedImage && (
-                  <>
-                    <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
-                    <p className="mt-1 text-gray-500 text-xs">Seed: {generatedImage.seed}</p>
-                  </>
-                )}
-              </div>
-            )}
-
-            {!generatedImage && !imageLoading && (
-              <div className="mt-6 p-8 border-2 border-dashed border-white/10 rounded-xl text-center">
-                <Image className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">Your generated image will appear here</p>
-              </div>
-            )}
           </div>
         )}
 
@@ -662,8 +409,17 @@ const AITools = () => {
                   disabled={isGenerating || !coverForm.company || !coverForm.role}
                   className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  <Zap className="w-4 h-4" />
-                  <span>Generate Cover Letter</span>
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Generate Cover Letter</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -675,9 +431,6 @@ const AITools = () => {
                   <div className="flex space-x-2">
                     <button onClick={handleCopy} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
                       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                      <Download className="w-4 h-4" />
                     </button>
                   </div>
                 )}
