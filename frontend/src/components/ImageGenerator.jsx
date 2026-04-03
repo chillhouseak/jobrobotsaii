@@ -19,16 +19,7 @@ const ImageGenerator = () => {
 
   const timeoutTimer = useRef(null);
 
-  // Inputs disabled while generating OR while image is still loading
   const inputsDisabled = isGenerating || (!!generatedImage && !imageLoaded);
-
-  const buildImageUrl = (seed) => {
-    const encoded = encodeURIComponent(prompt.trim());
-    const [w, h] = size.split('x').map(Number);
-    const styleParam = style && style !== 'none' ? `&model=${style}` : '';
-    // t= forces fresh image every time — critical for Pollinations
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}&seed=${seed}${styleParam}&nologo=true&t=${Date.now()}`;
-  };
 
   const clearSafetyTimeout = () => {
     if (timeoutTimer.current) {
@@ -65,17 +56,16 @@ const ImageGenerator = () => {
         body: JSON.stringify({ prompt: prompt.trim(), width, height, style }),
       });
 
-      if (!response.success || !response.data?.seed) {
+      if (!response.success || !response.data?.imageUrl) {
         throw new Error(response.message || 'Failed to generate image');
       }
 
-      const { seed } = response.data;
-      const imageUrl = buildImageUrl(seed);
+      // Backend returns the complete, fully-constructed image URL
+      // Frontend does NOT build the URL — avoids any URL construction bugs
+      const { imageUrl, seed, prompt: savedPrompt } = response.data;
 
-      setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
+      setGeneratedImage({ url: imageUrl, seed, prompt: savedPrompt });
       setIsGenerating(false);
-
-      // Start 30s safety timeout — only way an error is shown
       startSafetyTimeout();
     } catch (err) {
       setErrorMessage(err.message || 'Something went wrong. Please try again.');
@@ -83,8 +73,7 @@ const ImageGenerator = () => {
     }
   };
 
-  // onLoad is the ONLY signal that the image is ready
-  // Do NOT use onError — Pollinations may return HTML placeholder during generation
+  // onLoad is the ONLY success signal
   const handleImageLoad = () => {
     clearSafetyTimeout();
     setImageLoaded(true);
@@ -97,12 +86,7 @@ const ImageGenerator = () => {
     clearSafetyTimeout();
     setImageError(false);
     setImageLoaded(false);
-
-    // Rebuild URL with same seed + fresh cache-bust timestamp
-    const freshUrl = buildImageUrl(generatedImage.seed);
-    setGeneratedImage((prev) => ({ ...prev, url: freshUrl }));
-
-    // Restart 30s safety timeout
+    // Backend returns fresh URL on retry
     startSafetyTimeout();
   };
 
@@ -135,7 +119,6 @@ const ImageGenerator = () => {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Input Card */}
       <div className="glass-card p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
@@ -214,7 +197,6 @@ const ImageGenerator = () => {
         </div>
       </div>
 
-      {/* Image Result Card — shown as soon as URL is set */}
       {generatedImage && (
         <div className="glass-card p-6 mt-4">
           <div className="flex items-center justify-between mb-4">
@@ -239,7 +221,6 @@ const ImageGenerator = () => {
           </div>
 
           <div className="rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[320px] relative">
-            {/* Loading skeleton — shown while image is loading */}
             {!imageLoaded && !imageError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <div className="w-full max-w-sm px-8 animate-pulse">
@@ -252,7 +233,6 @@ const ImageGenerator = () => {
               </div>
             )}
 
-            {/* Error — ONLY triggered by 30s timeout, never by onError */}
             {imageError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <AlertCircle className="w-12 h-12 text-yellow-500 mb-3" />
@@ -268,12 +248,6 @@ const ImageGenerator = () => {
               </div>
             )}
 
-            {/*
-              img is ALWAYS in the DOM — onError is NOT connected.
-              Pollinations may return a placeholder/HTML during async generation.
-              Relying on onError fires a false positive — the image may load
-              successfully seconds later. The 30s timeout is the ONLY error signal.
-            */}
             <img
               key={generatedImage.url}
               src={generatedImage.url}
@@ -289,7 +263,6 @@ const ImageGenerator = () => {
         </div>
       )}
 
-      {/* Empty State */}
       {!generatedImage && !isGenerating && !errorMessage && (
         <div className="mt-4 p-12 border-2 border-dashed border-white/10 rounded-xl text-center">
           <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-3" />
