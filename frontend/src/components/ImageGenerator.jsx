@@ -19,11 +19,12 @@ const ImageGenerator = () => {
 
   const buildImageUrl = (seed) => {
     const encoded = encodeURIComponent(prompt.trim());
+    const w = parseInt(size.split('x')[0]);
+    const h = parseInt(size.split('x')[1]);
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
     const seedParam = seed ? `&seed=${seed}` : '';
-    // ?success=true tells Pollinations to wait for image to be fully generated
-    // ?t= prevents browser from using cached response
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${size.split('x')[0]}&height=${size.split('x')[1]}${seedParam}${styleParam}&nologo=true&success=true&t=${Date.now()}`;
+    // ?t= prevents browser cache — always gets fresh image
+    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true&t=${Date.now()}`;
   };
 
   const generateImage = async () => {
