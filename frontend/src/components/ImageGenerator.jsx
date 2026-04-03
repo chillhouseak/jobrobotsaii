@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import apiService from '../services/api';
 
-const IMAGE_TIMEOUT = 30000; // 30s — if img hasn't loaded by then, show error
+const IMAGE_TIMEOUT = 30000; // 30s — ONLY legitimate error trigger
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -19,6 +19,9 @@ const ImageGenerator = () => {
 
   const timeoutTimer = useRef(null);
 
+  // Inputs disabled while generating OR while image is still loading
+  const inputsDisabled = isGenerating || (!!generatedImage && !imageLoaded);
+
   const buildImageUrl = (seed) => {
     const encoded = encodeURIComponent(prompt.trim());
     const [w, h] = size.split('x').map(Number);
@@ -27,17 +30,27 @@ const ImageGenerator = () => {
     return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}&seed=${seed}${styleParam}&nologo=true&t=${Date.now()}`;
   };
 
-  const clearTimeout = () => {
+  const clearSafetyTimeout = () => {
     if (timeoutTimer.current) {
       window.clearTimeout(timeoutTimer.current);
       timeoutTimer.current = null;
     }
   };
 
+  const startSafetyTimeout = () => {
+    clearSafetyTimeout();
+    timeoutTimer.current = window.setTimeout(() => {
+      if (!imageLoaded) {
+        setImageError(true);
+        setErrorMessage('Image is taking too long. Please try again.');
+      }
+    }, IMAGE_TIMEOUT);
+  };
+
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
-    clearTimeout();
+    clearSafetyTimeout();
     setErrorMessage('');
     setImageError(false);
     setImageLoaded(false);
@@ -62,48 +75,35 @@ const ImageGenerator = () => {
       setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
       setIsGenerating(false);
 
-      // Safety timeout — if image hasn't loaded in 30s, assume it's not coming
-      timeoutTimer.current = window.setTimeout(() => {
-        if (!imageLoaded) {
-          setImageError(true);
-          setErrorMessage('Image is taking too long. Please try again.');
-        }
-      }, IMAGE_TIMEOUT);
+      // Start 30s safety timeout — only way an error is shown
+      startSafetyTimeout();
     } catch (err) {
       setErrorMessage(err.message || 'Something went wrong. Please try again.');
       setIsGenerating(false);
     }
   };
 
+  // onLoad is the ONLY signal that the image is ready
+  // Do NOT use onError — Pollinations may return HTML placeholder during generation
   const handleImageLoad = () => {
-    clearTimeout();
+    clearSafetyTimeout();
     setImageLoaded(true);
     setImageError(false);
-  };
-
-  const handleImageError = () => {
-    clearTimeout();
-    setImageError(true);
-    setErrorMessage('Image is still generating or server is busy. Please try again.');
   };
 
   const retryImage = () => {
     if (!generatedImage) return;
 
-    clearTimeout();
+    clearSafetyTimeout();
     setImageError(false);
     setImageLoaded(false);
 
+    // Rebuild URL with same seed + fresh cache-bust timestamp
     const freshUrl = buildImageUrl(generatedImage.seed);
     setGeneratedImage((prev) => ({ ...prev, url: freshUrl }));
 
-    // Restart the 30s safety timeout
-    timeoutTimer.current = window.setTimeout(() => {
-      if (!imageLoaded) {
-        setImageError(true);
-        setErrorMessage('Image is taking too long. Please try again.');
-      }
-    }, IMAGE_TIMEOUT);
+    // Restart 30s safety timeout
+    startSafetyTimeout();
   };
 
   const downloadImage = async () => {
@@ -125,7 +125,7 @@ const ImageGenerator = () => {
   };
 
   const reset = () => {
-    clearTimeout();
+    clearSafetyTimeout();
     setPrompt('');
     setGeneratedImage(null);
     setImageLoaded(false);
@@ -156,7 +156,7 @@ const ImageGenerator = () => {
             placeholder="A futuristic city at sunset, cyberpunk style..."
             rows={3}
             className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-gray-500 outline-none focus:border-primary/50 resize-none transition-colors"
-            disabled={isGenerating}
+            disabled={inputsDisabled}
             onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && generateImage()}
           />
 
@@ -166,7 +166,7 @@ const ImageGenerator = () => {
               <select
                 value={style}
                 onChange={(e) => setStyle(e.target.value)}
-                disabled={isGenerating}
+                disabled={inputsDisabled}
                 className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm outline-none focus:border-primary/50 transition-colors"
               >
                 <option value="none">None</option>
@@ -183,7 +183,7 @@ const ImageGenerator = () => {
               <select
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
-                disabled={isGenerating}
+                disabled={inputsDisabled}
                 className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm outline-none focus:border-primary/50 transition-colors"
               >
                 <option value="1024x1024">Square (1024×1024)</option>
@@ -196,7 +196,7 @@ const ImageGenerator = () => {
 
           <button
             onClick={generateImage}
-            disabled={isGenerating || !prompt.trim()}
+            disabled={inputsDisabled || !prompt.trim()}
             className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
             {isGenerating ? (
@@ -214,7 +214,7 @@ const ImageGenerator = () => {
         </div>
       </div>
 
-      {/* Image Result Card */}
+      {/* Image Result Card — shown as soon as URL is set */}
       {generatedImage && (
         <div className="glass-card p-6 mt-4">
           <div className="flex items-center justify-between mb-4">
@@ -239,7 +239,7 @@ const ImageGenerator = () => {
           </div>
 
           <div className="rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[320px] relative">
-            {/* Loading state — shown until img fires onLoad */}
+            {/* Loading skeleton — shown while image is loading */}
             {!imageLoaded && !imageError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <div className="w-full max-w-sm px-8 animate-pulse">
@@ -247,12 +247,12 @@ const ImageGenerator = () => {
                 </div>
                 <div className="mt-4 flex flex-col items-center gap-2">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  <p className="text-gray-400 text-sm">Generating your image...</p>
+                  <p className="text-gray-400 text-sm">Generating image (may take a few seconds)...</p>
                 </div>
               </div>
             )}
 
-            {/* Error state */}
+            {/* Error — ONLY triggered by 30s timeout, never by onError */}
             {imageError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <AlertCircle className="w-12 h-12 text-yellow-500 mb-3" />
@@ -268,13 +268,17 @@ const ImageGenerator = () => {
               </div>
             )}
 
-            {/* img is ALWAYS rendered — onLoad fires when Pollinations finishes */}
+            {/*
+              img is ALWAYS in the DOM — onError is NOT connected.
+              Pollinations may return a placeholder/HTML during async generation.
+              Relying on onError fires a false positive — the image may load
+              successfully seconds later. The 30s timeout is the ONLY error signal.
+            */}
             <img
               key={generatedImage.url}
               src={generatedImage.url}
               alt={generatedImage.prompt}
               onLoad={handleImageLoad}
-              onError={handleImageError}
               className="w-full object-contain max-h-[512px] mx-auto"
               style={{ display: imageLoaded ? 'block' : 'none' }}
             />
