@@ -246,14 +246,13 @@ const ImageGenerator = () => {
               </div>
             )}
 
-            {/* Image — always rendered, shown/hidden by loading state */}
+            {/* Image — always rendered so onLoad/onError always fire */}
             <img
               src={generatedImage.url}
               alt={generatedImage.prompt}
               onLoad={handleImageLoad}
               onError={handleImageError}
               className="w-full object-contain max-h-[512px] mx-auto"
-              style={{ display: imageLoading ? 'none' : 'block' }}
             />
 
             {/* Error state — no retry left */}
