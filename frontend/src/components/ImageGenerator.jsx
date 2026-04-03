@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import { Sparkles, Download, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import apiService from '../services/api';
 
-const LOAD_DELAY = 2500; // 2.5s delay before loading image
-const MAX_RETRIES = 1;   // Only 1 retry on failure
+const LOAD_DELAY = 3000;
+const MAX_RETRIES = 1;
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -16,7 +16,8 @@ const ImageGenerator = () => {
   const [error, setError] = useState('');
 
   const retryCount = useRef(0);
-  const delayTimer = useRef(null);
+  const loadTimer = useRef(null);
+  const retryTimer = useRef(null);
 
   const buildImageUrl = (seed) => {
     const encoded = encodeURIComponent(prompt.trim());
@@ -27,15 +28,17 @@ const ImageGenerator = () => {
     return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true`;
   };
 
+  const clearTimers = () => {
+    if (loadTimer.current) clearTimeout(loadTimer.current);
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    loadTimer.current = null;
+    retryTimer.current = null;
+  };
+
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
-    // Clear any pending timers
-    if (delayTimer.current) {
-      clearTimeout(delayTimer.current);
-      delayTimer.current = null;
-    }
-
+    clearTimers();
     retryCount.current = 0;
     setIsGenerating(true);
     setError('');
@@ -59,8 +62,8 @@ const ImageGenerator = () => {
         setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
         setIsGenerating(false);
 
-        // Delay before loading — avoids hitting Pollinations while it's still generating
-        delayTimer.current = setTimeout(() => {
+        // Delay before showing image — gives Pollinations time to render
+        loadTimer.current = setTimeout(() => {
           setIsLoading(true);
         }, LOAD_DELAY);
       } else {
@@ -74,31 +77,29 @@ const ImageGenerator = () => {
   };
 
   const handleImageLoad = () => {
+    clearTimers();
     retryCount.current = 0;
     setIsLoading(false);
     setHasError(false);
   };
 
   const handleImageError = () => {
+    clearTimers();
+
     if (retryCount.current >= MAX_RETRIES) {
-      // Retried once and still failed — show friendly message
       setIsLoading(false);
       setHasError(true);
       setError('Server busy, please try again in a moment.');
       return;
     }
 
-    // Retry once after delay
     retryCount.current += 1;
     setIsLoading(false);
 
-    delayTimer.current = setTimeout(() => {
+    retryTimer.current = setTimeout(() => {
       if (generatedImage) {
-        setGeneratedImage((prev) => ({
-          ...prev,
-          // Cache-bust with fresh timestamp
-          url: `${prev.url.split('&t=')[0]}&t=${Date.now()}`,
-        }));
+        const freshUrl = buildImageUrl(generatedImage.seed);
+        setGeneratedImage((prev) => ({ ...prev, url: freshUrl }));
         setIsLoading(true);
       }
     }, LOAD_DELAY);
@@ -115,7 +116,7 @@ const ImageGenerator = () => {
   };
 
   const reset = () => {
-    if (delayTimer.current) clearTimeout(delayTimer.current);
+    clearTimers();
     retryCount.current = 0;
     setPrompt('');
     setGeneratedImage(null);
@@ -232,7 +233,7 @@ const ImageGenerator = () => {
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
                 <p className="text-gray-400 text-sm">
-                  Loading image...{retryCount.current > 0 && ` (1 retry)`}
+                  {retryCount.current === 0 ? 'Loading image...' : `Retrying... (${retryCount.current}/${MAX_RETRIES})`}
                 </p>
               </div>
             )}
@@ -250,7 +251,7 @@ const ImageGenerator = () => {
             {!hasError && (
               <img
                 key={generatedImage.url}
-                src={`${generatedImage.url}&t=${Date.now()}`}
+                src={generatedImage.url}
                 alt={generatedImage.prompt}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
