@@ -106,44 +106,29 @@ export default async function handler(req, res) {
   // PUBLIC ROUTES
   // ============================================================
 
-  // Image Generation — returns base64 image, no CORS issues
+  // Image Generation — returns URL only, frontend loads it
   if (action === 'generate-image' && method === 'POST') {
     const { prompt, width = 1024, height = 1024, seed, style } = body || {};
-    if (!prompt?.trim()) return res.status(400).json({ success: false, message: 'Prompt is required' });
+
+    if (!prompt?.trim()) {
+      return res.status(400).json({ success: false, message: 'Prompt is required' });
+    }
 
     const encoded = encodeURIComponent(prompt.trim());
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
     const seedParam = seed ? `&seed=${seed}` : '';
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}${seedParam}${styleParam}&nologo=true`;
 
-    try {
-      // Fetch image from Pollinations (server-side, no CORS)
-      const imageRes = await fetch(imageUrl);
-      if (!imageRes.ok) throw new Error('Failed to fetch image from Pollinations');
-
-      const contentType = imageRes.headers.get('content-type') || '';
-      if (!contentType.startsWith('image/')) {
-        throw new Error('Pollinations returned an error page instead of an image');
-      }
-
-      const buffer = await imageRes.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString('base64');
-      const dataUrl = `data:${contentType};base64,${base64}`;
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          imageUrl: dataUrl,
-          prompt: prompt.trim(),
-          width,
-          height,
-          seed: seed || Math.floor(Math.random() * 999999999),
-        },
-      });
-    } catch (err) {
-      console.error('Image generation error:', err.message);
-      return res.status(500).json({ success: false, message: err.message || 'Failed to generate image' });
-    }
+    return res.status(200).json({
+      success: true,
+      data: {
+        imageUrl,
+        prompt: prompt.trim(),
+        width,
+        height,
+        seed: seed || Math.floor(Math.random() * 999999999),
+      },
+    });
   }
 
   // Goal Tracker
