@@ -1,9 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { Sparkles, Download, RefreshCw, Loader2, AlertCircle, Image } from 'lucide-react';
 import apiService from '../services/api';
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1500;
 
 const ImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -11,35 +8,27 @@ const ImageGenerator = () => {
   const [size, setSize] = useState('1024x1024');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(null);
-  const [imageLoading, setImageLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [error, setError] = useState('');
 
-  const retryCount = useRef(0);
-  const retryTimeout = useRef(null);
-  const imageData = useRef(null);
-
-  const buildImageUrl = useCallback((seed) => {
+  const buildImageUrl = (seed) => {
     const encoded = encodeURIComponent(prompt.trim());
     const w = parseInt(size.split('x')[0]);
     const h = parseInt(size.split('x')[1]);
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
     const seedParam = seed ? `&seed=${seed}` : '';
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true&retry=${Date.now()}`;
-  }, [prompt, size, style]);
+    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true`;
+  };
 
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
-    if (retryTimeout.current) {
-      clearTimeout(retryTimeout.current);
-      retryTimeout.current = null;
-    }
-    retryCount.current = 0;
-
     setIsGenerating(true);
     setError('');
+    setHasError(false);
     setGeneratedImage(null);
-    setImageLoading(false);
+    setIsLoading(false);
 
     try {
       const width = parseInt(size.split('x')[0]);
@@ -53,49 +42,33 @@ const ImageGenerator = () => {
       if (response.success && response.data) {
         const seed = response.data.seed || Math.floor(Math.random() * 999999999);
         const imageUrl = buildImageUrl(seed);
-        const data = { url: imageUrl, seed, prompt: prompt.trim() };
 
-        imageData.current = data;
-        setGeneratedImage(data);
-        setImageLoading(true);
+        setGeneratedImage({ url: imageUrl, seed, prompt: prompt.trim() });
+        setIsGenerating(false);
+
+        // Small delay before loading — gives Pollinations time to render
+        setTimeout(() => {
+          setIsLoading(true);
+        }, 1500);
       } else {
         setError(response.message || 'Failed to generate image');
+        setIsGenerating(false);
       }
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
-    } finally {
       setIsGenerating(false);
     }
   };
 
-  const retryImage = useCallback(() => {
-    if (retryCount.current >= MAX_RETRIES) {
-      setError('Image took too long. Please try again.');
-      setImageLoading(false);
-      return;
-    }
+  const handleImageLoad = () => {
+    setIsLoading(false);
+    setHasError(false);
+  };
 
-    retryCount.current += 1;
-
-    retryTimeout.current = setTimeout(() => {
-      if (imageData.current) {
-        const newUrl = buildImageUrl(imageData.current.seed);
-        const data = { ...imageData.current, url: newUrl };
-        imageData.current = data;
-        setGeneratedImage(data);
-      }
-    }, RETRY_DELAY);
-  }, [buildImageUrl]);
-
-  const handleImageLoad = useCallback(() => {
-    retryCount.current = 0;
-    setImageLoading(false);
-    setError('');
-  }, []);
-
-  const handleImageError = useCallback(() => {
-    retryImage();
-  }, [retryImage]);
+  const handleImageError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
 
   const downloadImage = () => {
     if (!generatedImage?.url) return;
@@ -108,12 +81,10 @@ const ImageGenerator = () => {
   };
 
   const reset = () => {
-    if (retryTimeout.current) clearTimeout(retryTimeout.current);
-    retryCount.current = 0;
-    imageData.current = null;
     setPrompt('');
     setGeneratedImage(null);
-    setImageLoading(false);
+    setIsLoading(false);
+    setHasError(false);
     setError('');
   };
 
@@ -139,7 +110,7 @@ const ImageGenerator = () => {
             placeholder="A beautiful sunset over the ocean..."
             rows={3}
             className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-gray-500 outline-none focus:border-primary/50 resize-none"
-            disabled={isGenerating || imageLoading}
+            disabled={isGenerating}
             onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && generateImage()}
           />
 
@@ -149,7 +120,7 @@ const ImageGenerator = () => {
               <select
                 value={style}
                 onChange={(e) => setStyle(e.target.value)}
-                disabled={isGenerating || imageLoading}
+                disabled={isGenerating}
                 className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
               >
                 <option value="none">None</option>
@@ -166,7 +137,7 @@ const ImageGenerator = () => {
               <select
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
-                disabled={isGenerating || imageLoading}
+                disabled={isGenerating}
                 className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
               >
                 <option value="1024x1024">Square (1024×1024)</option>
@@ -179,13 +150,13 @@ const ImageGenerator = () => {
 
           <button
             onClick={generateImage}
-            disabled={isGenerating || imageLoading || !prompt.trim()}
+            disabled={isGenerating || !prompt.trim()}
             className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {isGenerating || imageLoading ? (
+            {isGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                {isGenerating ? 'Generating...' : `Loading image...${retryCount.current > 0 ? ` (retry ${retryCount.current}/${MAX_RETRIES})` : ''}`}
+                Generating...
               </>
             ) : (
               <>
@@ -204,7 +175,7 @@ const ImageGenerator = () => {
             <div className="flex gap-2">
               <button
                 onClick={downloadImage}
-                disabled={imageLoading}
+                disabled={isLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs transition-colors disabled:opacity-50"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -221,33 +192,32 @@ const ImageGenerator = () => {
           </div>
 
           <div className="rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative">
-            {imageLoading && (
+            {isLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                <p className="text-gray-400 text-sm">
-                  Loading image...{retryCount.current > 0 ? ` (retry ${retryCount.current}/${MAX_RETRIES})` : ''}
-                </p>
+                <p className="text-gray-400 text-sm">Loading image...</p>
               </div>
             )}
 
-            <img
-              key={generatedImage.url}
-              src={generatedImage.url}
-              alt={generatedImage.prompt}
-              onLoad={handleImageLoad}
-              onError={handleImageError}
-              className="w-full object-contain max-h-[512px] mx-auto"
-            />
-
-            {!imageLoading && error && (
+            {hasError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <Image className="w-12 h-12 text-gray-600 mb-3" />
-                <p className="text-gray-400 text-sm mb-3">{error}</p>
+                <p className="text-gray-400 text-sm mb-3">Image failed to load</p>
                 <button onClick={generateImage} className="text-primary text-sm hover:underline">
                   Try again
                 </button>
               </div>
             )}
+
+            <img
+              key={generatedImage.url}
+              src={`${generatedImage.url}&t=${Date.now()}`}
+              alt={generatedImage.prompt}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              className="w-full object-contain max-h-[512px] mx-auto"
+              style={{ display: hasError ? 'none' : 'block' }}
+            />
           </div>
 
           <p className="mt-3 text-gray-400 text-xs italic">"{generatedImage.prompt}"</p>
@@ -255,7 +225,7 @@ const ImageGenerator = () => {
         </div>
       )}
 
-      {!generatedImage && !isGenerating && !imageLoading && !error && (
+      {!generatedImage && !isGenerating && !error && (
         <div className="mt-4 p-12 border-2 border-dashed border-white/10 rounded-xl text-center">
           <Sparkles className="w-10 h-10 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-500 text-sm">Your generated image will appear here</p>
