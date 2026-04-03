@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Sparkles, Download, RefreshCw, Loader2, AlertCircle, Image } from 'lucide-react';
 import apiService from '../services/api';
 
@@ -16,21 +16,20 @@ const ImageGenerator = () => {
 
   const retryCount = useRef(0);
   const retryTimeout = useRef(null);
+  const imageData = useRef(null);
 
-  const buildImageUrl = (seed) => {
+  const buildImageUrl = useCallback((seed) => {
     const encoded = encodeURIComponent(prompt.trim());
     const w = parseInt(size.split('x')[0]);
     const h = parseInt(size.split('x')[1]);
     const styleParam = style && style !== 'none' ? `&model=${style}` : '';
     const seedParam = seed ? `&seed=${seed}` : '';
-    // ?t= prevents browser cache — always gets fresh image
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true&t=${Date.now()}`;
-  };
+    return `https://image.pollinations.ai/prompt/${encoded}?width=${w}&height=${h}${seedParam}${styleParam}&nologo=true&retry=${Date.now()}`;
+  }, [prompt, size, style]);
 
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
-    // Clear any pending retry
     if (retryTimeout.current) {
       clearTimeout(retryTimeout.current);
       retryTimeout.current = null;
@@ -46,7 +45,6 @@ const ImageGenerator = () => {
       const width = parseInt(size.split('x')[0]);
       const height = parseInt(size.split('x')[1]);
 
-      // Call backend to validate and get structured response
       const response = await apiService.request('/ai/generate-image', {
         method: 'POST',
         body: JSON.stringify({ prompt: prompt.trim(), width, height, style }),
@@ -55,13 +53,10 @@ const ImageGenerator = () => {
       if (response.success && response.data) {
         const seed = response.data.seed || Math.floor(Math.random() * 999999999);
         const imageUrl = buildImageUrl(seed);
+        const data = { url: imageUrl, seed, prompt: prompt.trim() };
 
-        setGeneratedImage({
-          url: imageUrl,
-          seed,
-          prompt: prompt.trim(),
-        });
-
+        imageData.current = data;
+        setGeneratedImage(data);
         setImageLoading(true);
       } else {
         setError(response.message || 'Failed to generate image');
@@ -73,8 +68,7 @@ const ImageGenerator = () => {
     }
   };
 
-  // Retry with fixed delay and cache busting
-  const retryImage = () => {
+  const retryImage = useCallback(() => {
     if (retryCount.current >= MAX_RETRIES) {
       setError('Image took too long. Please try again.');
       setImageLoading(false);
@@ -84,25 +78,24 @@ const ImageGenerator = () => {
     retryCount.current += 1;
 
     retryTimeout.current = setTimeout(() => {
-      if (generatedImage) {
-        // Cache bust with retry count to force fresh request
-        setGeneratedImage((prev) => ({
-          ...prev,
-          url: `${prev.url.split('&t=')[0]}&retry=${retryCount.current}&t=${Date.now()}`,
-        }));
+      if (imageData.current) {
+        const newUrl = buildImageUrl(imageData.current.seed);
+        const data = { ...imageData.current, url: newUrl };
+        imageData.current = data;
+        setGeneratedImage(data);
       }
     }, RETRY_DELAY);
-  };
+  }, [buildImageUrl]);
 
-  const handleImageLoad = () => {
+  const handleImageLoad = useCallback(() => {
     retryCount.current = 0;
     setImageLoading(false);
     setError('');
-  };
+  }, []);
 
-  const handleImageError = () => {
+  const handleImageError = useCallback(() => {
     retryImage();
-  };
+  }, [retryImage]);
 
   const downloadImage = () => {
     if (!generatedImage?.url) return;
@@ -117,6 +110,7 @@ const ImageGenerator = () => {
   const reset = () => {
     if (retryTimeout.current) clearTimeout(retryTimeout.current);
     retryCount.current = 0;
+    imageData.current = null;
     setPrompt('');
     setGeneratedImage(null);
     setImageLoading(false);
@@ -131,7 +125,6 @@ const ImageGenerator = () => {
           AI Image Generator
         </h2>
 
-        {/* Error */}
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -139,7 +132,6 @@ const ImageGenerator = () => {
           </div>
         )}
 
-        {/* Input */}
         <div className="space-y-4">
           <textarea
             value={prompt}
@@ -190,15 +182,10 @@ const ImageGenerator = () => {
             disabled={isGenerating || imageLoading || !prompt.trim()}
             className="gradient-btn w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {isGenerating ? (
+            {isGenerating || imageLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : imageLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading image...
+                {isGenerating ? 'Generating...' : `Loading image...${retryCount.current > 0 ? ` (retry ${retryCount.current}/${MAX_RETRIES})` : ''}`}
               </>
             ) : (
               <>
@@ -210,7 +197,6 @@ const ImageGenerator = () => {
         </div>
       </div>
 
-      {/* Result */}
       {generatedImage && (
         <div className="glass-card p-6 mt-4">
           <div className="flex items-center justify-between mb-4">
@@ -235,18 +221,17 @@ const ImageGenerator = () => {
           </div>
 
           <div className="rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative">
-            {/* Loading overlay */}
             {imageLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
                 <p className="text-gray-400 text-sm">
-                  Loading image...{retryCount.current > 0 && ` (retry ${retryCount.current}/${MAX_RETRIES})`}
+                  Loading image...{retryCount.current > 0 ? ` (retry ${retryCount.current}/${MAX_RETRIES})` : ''}
                 </p>
               </div>
             )}
 
-            {/* Image — always rendered so onLoad/onError always fire */}
             <img
+              key={generatedImage.url}
               src={generatedImage.url}
               alt={generatedImage.prompt}
               onLoad={handleImageLoad}
@@ -254,15 +239,11 @@ const ImageGenerator = () => {
               className="w-full object-contain max-h-[512px] mx-auto"
             />
 
-            {/* Error state — no retry left */}
             {!imageLoading && error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <Image className="w-12 h-12 text-gray-600 mb-3" />
                 <p className="text-gray-400 text-sm mb-3">{error}</p>
-                <button
-                  onClick={generateImage}
-                  className="text-primary text-sm hover:underline"
-                >
+                <button onClick={generateImage} className="text-primary text-sm hover:underline">
                   Try again
                 </button>
               </div>
@@ -274,7 +255,6 @@ const ImageGenerator = () => {
         </div>
       )}
 
-      {/* Empty State */}
       {!generatedImage && !isGenerating && !imageLoading && !error && (
         <div className="mt-4 p-12 border-2 border-dashed border-white/10 rounded-xl text-center">
           <Sparkles className="w-10 h-10 text-gray-600 mx-auto mb-3" />
