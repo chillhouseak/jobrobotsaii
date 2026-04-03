@@ -106,33 +106,21 @@ export default async function handler(req, res) {
   // PUBLIC ROUTES
   // ============================================================
 
-  // Image Generation — returns URL only, frontend loads it
+  // Image Generation — returns seed, frontend constructs URL
   if (action === 'generate-image' && method === 'POST') {
     const prompt = body?.prompt?.trim();
-    const width = parseInt(body?.width) || 1024;
-    const height = parseInt(body?.height) || 1024;
-    const seed = parseInt(body?.seed) || Math.floor(Math.random() * 999999999);
-    const style = body?.style;
 
     if (!prompt) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ success: false, message: 'Prompt is required' });
     }
 
-    const encoded = encodeURIComponent(prompt);
-    const styleParam = style && style !== 'none' ? `&model=${style}` : '';
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&seed=${seed}${styleParam}&nologo=true`;
+    const seed = Math.floor(Math.random() * 999999999);
 
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
       success: true,
-      data: {
-        imageUrl,
-        prompt,
-        width,
-        height,
-        seed,
-      },
+      data: { seed },
     });
   }
 
