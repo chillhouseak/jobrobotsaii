@@ -156,6 +156,15 @@ class ApiService {
     });
   }
 
+  async generateGoalTracker(goal, targetDays, currentProgress) {
+    // Map frontend params to backend params
+    const timeframe = targetDays ? `${targetDays} days` : '60 days';
+    return this.request('/ai/goal-tracker', {
+      method: 'POST',
+      body: JSON.stringify({ goal, timeframe, obstacles: currentProgress }),
+    });
+  }
+
   async forgotPassword(email) {
     return this.request('/auth/forgot-password', {
       method: 'POST',
