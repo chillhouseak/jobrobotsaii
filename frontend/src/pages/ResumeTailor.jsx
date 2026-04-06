@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FileText, Sparkles, Loader2, Copy, CheckCircle2, X, Download } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { FileText, Sparkles, Loader2, Copy, CheckCircle2, Upload, X, Download, File } from 'lucide-react';
 import Layout from '../components/Layout';
 import apiService from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -13,6 +13,43 @@ const ResumeTailor = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = async (file) => {
+    if (!file) return;
+
+    const allowedTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(txt|pdf|docx)$/i)) {
+      setError('Please upload a .txt, .pdf, or .docx file');
+      return;
+    }
+
+    setUploadedFile(file);
+    setError('');
+
+    try {
+      const text = await file.text();
+      setResume(text);
+    } catch (err) {
+      setError('Failed to read file. Please copy and paste your resume instead.');
+      setUploadedFile(null);
+    }
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    handleFileChange(file);
+  };
+
+  const removeFile = () => {
+    setUploadedFile(null);
+    setResume('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const tailorResume = async () => {
     if (!resume.trim() || !jobDescription.trim()) return;
@@ -82,15 +119,84 @@ const ResumeTailor = () => {
             />
           </div>
 
-          {/* Resume Input */}
+          {/* Resume Upload */}
           <div className="mb-5">
             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Your Current Resume
+              Upload Your Resume
+            </label>
+
+            {uploadedFile ? (
+              /* File uploaded — show file info */
+              <div className={`p-4 rounded-xl border flex items-center justify-between ${
+                isDark ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'
+              }`}>
+                <div className="flex items-center space-x-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'
+                  }`}>
+                    <File className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{uploadedFile.name}</p>
+                    <p className={`text-xs ${isDark ? 'text-emerald-400/60' : 'text-emerald-500'}`}>
+                      {(uploadedFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={removeFile}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isDark ? 'hover:bg-emerald-500/20 text-emerald-400' : 'hover:bg-emerald-100 text-emerald-600'
+                  }`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              /* Dropzone */
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleFileDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all text-center ${
+                  isDragging
+                    ? 'border-primary bg-primary/10'
+                    : isDark
+                      ? 'border-white/20 bg-white/5 hover:bg-white/5 hover:border-white/30'
+                      : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.pdf,.docx"
+                  onChange={(e) => handleFileChange(e.target.files[0])}
+                  className="hidden"
+                />
+                <Upload className={`w-8 h-8 mx-auto mb-3 ${isDark ? 'text-gray-400' : 'text-gray-400'}`} />
+                <p className={`text-sm font-medium mb-1 ${isDark ? 'text-white' : 'text-gray-700'}`}>
+                  Drop your resume here or click to upload
+                </p>
+                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Supports .txt, .pdf, .docx
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Resume Text — editable after upload or manual paste */}
+          <div className="mb-5">
+            <label className={`block text-sm font-medium mb-2 flex items-center justify-between ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Resume Content</span>
+              {uploadedFile && (
+                <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Auto-loaded from file</span>
+              )}
             </label>
             <textarea
               value={resume}
-              onChange={(e) => setResume(e.target.value)}
-              placeholder="Paste your current resume here..."
+              onChange={(e) => { setResume(e.target.value); setUploadedFile(null); }}
+              placeholder="Upload a file above or paste your resume text here..."
               rows={10}
               className={`w-full px-4 py-3 rounded-xl text-sm resize-none transition-all font-mono ${
                 isDark
@@ -168,18 +274,12 @@ const ResumeTailor = () => {
 
             {/* ATS Keywords & Missing Keywords */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* ATS Keywords */}
               {result.atsKeywords?.length > 0 && (
                 <div className={`p-6 rounded-2xl ${isDark ? 'bg-white/[0.05] border border-white/10' : 'bg-white border border-gray-200'}`}>
                   <h3 className={`font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>ATS Keywords Found</h3>
                   <div className="flex flex-wrap gap-2">
                     {result.atsKeywords.map((kw, i) => (
-                      <span
-                        key={i}
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
-                        }`}
-                      >
+                      <span key={i} className={`px-2 py-1 rounded-full text-xs font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-700'}`}>
                         {kw}
                       </span>
                     ))}
@@ -187,18 +287,12 @@ const ResumeTailor = () => {
                 </div>
               )}
 
-              {/* Missing Keywords */}
               {result.missingKeywords?.length > 0 && (
                 <div className={`p-6 rounded-2xl ${isDark ? 'bg-white/[0.05] border border-white/10' : 'bg-white border border-gray-200'}`}>
                   <h3 className={`font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Missing Keywords</h3>
                   <div className="flex flex-wrap gap-2">
                     {result.missingKeywords.map((kw, i) => (
-                      <span
-                        key={i}
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700'
-                        }`}
-                      >
+                      <span key={i} className={`px-2 py-1 rounded-full text-xs font-medium ${isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700'}`}>
                         {kw}
                       </span>
                     ))}
@@ -252,12 +346,7 @@ const ResumeTailor = () => {
                 <h3 className={`font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Skills to Highlight</h3>
                 <div className="flex flex-wrap gap-2">
                   {result.skillsToHighlight.map((skill, i) => (
-                    <span
-                      key={i}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                        isDark ? 'bg-primary/20 text-primary-light' : 'bg-primary/10 text-primary'
-                      }`}
-                    >
+                    <span key={i} className={`px-3 py-1.5 rounded-full text-xs font-medium ${isDark ? 'bg-primary/20 text-primary-light' : 'bg-primary/10 text-primary'}`}>
                       {skill}
                     </span>
                   ))}
@@ -307,7 +396,7 @@ const ResumeTailor = () => {
             </div>
             <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Ready to Tailor</h3>
             <p className={`max-w-md mx-auto ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Paste your resume and the job description above to get an ATS-optimized, keyword-matched tailored resume
+              Upload your resume and paste the job description above to get an ATS-optimized, keyword-matched tailored resume
             </p>
           </div>
         )}
