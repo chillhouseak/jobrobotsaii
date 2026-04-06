@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import User from './models/User.js';
+import ResumeAnalysis from './models/ResumeAnalysis.js';
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const HF_API_KEY = process.env.HF_API_TOKEN;
@@ -98,7 +99,7 @@ const callAI = async (prompt, feature, context = {}) => {
     coverLetter: (c, r, e) => `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${r} position at ${c}. With my background in ${e || 'software development'}, I believe I would be a valuable addition to your team.\n\nThank you for considering my application.\n\nSincerely`,
     outreach: (t, n, c, g) => `Hi ${n},\n\nI hope this message finds you well! I'm exploring opportunities in ${g || 'software development'} and came across your profile.\n\nI would love to connect.\n\nBest regards`,
     goalTracker: (g, f) => `# Action Plan: ${g}\n\n**Timeframe:** ${f || '3 months'}\n\n## Phase 1 (Weeks 1-2): Research & Preparation\n- Research the target role and industry\n- Update resume and LinkedIn profile\n\n## Phase 2 (Weeks 3-6): Active Search\n- Apply to 3-5 positions per week\n- Network with professionals\n\n## Phase 3 (Weeks 7-10): Interviews\n- Prepare for each interview\n- Send thank-you notes\n\n## Phase 4 (Weeks 11-12): Decision\n- Evaluate offers\n- Plan transition`,
-    tailorResume: (j) => `# Tailored Resume\n\n## ATS Keywords\nReview job description for repeated terms and include them.\n\n## Summary Rewrite\nInclude years of experience, key skills, and a measurable achievement.\n\n## Action Verbs\nImplemented, Developed, Led, Optimized, Increased, Reduced`,
+    tailorResume: () => `━━━ RESUME REVIEW REPORT ━━━\n\nOVERALL SCORE: 7/10\n\nSTRENGTHS:\n• Strong technical skill listing\n• Good project diversity\n• Clear work experience\n\nAREAS FOR IMPROVEMENT:\n• Missing quantifiable achievements in experience section\n• Summary is too generic and lacks impact\n• No ATS-optimized keywords\n\nSECTION-WISE FEEDBACK:\n\nSummary:\nYour summary is too broad. Rewrite it to be specific to your target role and include 1-2 key achievements with metrics.\n\nExperience:\n• Add metrics to every bullet (e.g., "improved performance by 30%")\n• Use stronger action verbs: Led, Architected, Scaled instead of Worked on, Involved in\n• Quantify team size, budget, or impact where possible\n\nSkills:\n• Organize skills into categories: Languages, Frameworks, Tools, Soft Skills\n• Remove outdated or irrelevant skills\n• Add keywords from the job description\n\nProjects:\n• Add measurable outcomes to project descriptions\n• Include tech stack used in each project\n\nATS OPTIMIZATION TIPS:\n• Use standard section headings: Experience, Education, Skills (not "My Work History")\n• Avoid tables, columns, or complex formatting\n• Place keywords naturally — ATS scans for exact keyword matches\n• Keep file format simple: .docx or .pdf (not .pages)\n\nACTIONABLE NEXT STEPS:\n1. Rewrite your professional summary with 2 specific achievements\n2. Add metrics to your top 3 experience bullets\n3. Cross-reference the job description and add missing keywords to your skills section`,
   };
   const fallback = { answer: mocks.answer(context.role, context.tone, context.length), coverLetter: mocks.coverLetter(context.company, context.role, context.experience), outreach: mocks.outreach(context.type, context.recipientName, context.company, context.targetRole), goalTracker: mocks.goalTracker(context.goal, context.timeframe), tailorResume: mocks.tailorResume(context.jobDescription) };
   return { text: fallback[feature] || 'AI service unavailable.', provider: 'mock' };
@@ -157,19 +158,240 @@ export default async function handler(req, res) {
   // Resume Tailor
   if (action === 'tailor-resume' && method === 'POST') {
     const { resume, jobDescription, targetRole } = body || {};
-    if (!resume || !jobDescription) return res.status(400).json({ success: false, message: 'Resume and job description required' });
+    if (!resume) return res.status(400).json({ success: false, message: 'Resume is required' });
 
     try {
-      const { text } = await callAI(
-        `You are an expert resume writer. Tailor this resume for the job description.\n\nResume:\n${resume}\n\nJob Description:\n${jobDescription}\n\n${targetRole ? `Target Role: ${targetRole}\n` : ''}\n\nReturn ONLY valid JSON with this exact structure, no markdown, no explanation:\n{\n  "tailoredSummary": "A rewritten professional summary optimized for this job",\n  "atsKeywords": ["keyword1", "keyword2", "keyword3"],\n  "missingKeywords": ["missing skill1", "missing skill2"],\n  "keyAdditions": ["Addition 1", "Addition 2"],\n  "relevantExperience": [\n    {"original": "Original bullet", "tailored": "Rewritten bullet with ATS keywords"}\n  ],\n  "skillsToHighlight": ["skill1", "skill2", "skill3"],\n  "tailoredResume": "Full resume rewritten in markdown format with ATS optimization"\n}`,
+      const { text, provider } = await callAI(
+        `You are an expert resume reviewer and career coach with years of experience reviewing resumes for tech and professional roles.
+
+${targetRole ? `TARGET ROLE: ${targetRole}` : ''}
+${jobDescription ? `JOB DESCRIPTION:\n${jobDescription}\n` : ''}
+CANDIDATE RESUME:
+${resume}
+
+Analyze this resume and produce a detailed professional review report. Follow this EXACT format — do not deviate:
+
+━━━ RESUME REVIEW REPORT ━━━
+
+OVERALL SCORE: X/10
+[Give a realistic score. 9-10 = exceptional, 7-8 = strong, 5-6 = average, below 5 = needs significant work]
+
+STRENGTHS:
+• [Be specific — name actual skills, experiences, or achievements found in the resume]
+• [At least 2-3 concrete strengths]
+• [Focus on things the candidate actually did well]
+
+AREAS FOR IMPROVEMENT:
+• [Be specific and actionable — avoid generic advice]
+• [Name the exact problem and the exact fix]
+• [At least 3-5 concrete issues]
+
+SECTION-WISE FEEDBACK:
+
+Summary:
+[2-4 sentences. Is the summary specific to a role? Does it lead with achievements? Is the tone right?]
+
+Experience:
+[For each role mentioned, comment on: Do bullets show impact with metrics? Are action verbs strong? Is the progression clear?]
+
+Skills:
+[Which skills are relevant and well-presented? Which are missing based on the job description or role?]
+
+Projects:
+[Are projects described with outcomes? Tech stack mentioned? Individual contribution clear?]
+
+Education:
+[Is education section appropriate? Any certifications or courses that add value?]
+
+KEYWORD OPTIMIZATION:
+${jobDescription ? `Compare resume keywords against the job description:\n• MATCHED keywords (found in both): [list]\n• MISSING keywords (in job description, not in resume): [list]\n• SUGGESTED additions: [2-3 skills or terms to weave in naturally]\n` : `Based on the resume content, suggest 5-8 important keywords a hiring manager would look for:\n• [keyword 1]\n• [keyword 2]\n• ...\n`}
+ATS OPTIMIZATION TIPS:
+• [3-4 specific, actionable ATS tips — format, section headings, what to avoid, what to include]
+
+ACTIONABLE NEXT STEPS:
+1. [Specific, prioritized action — what to do first and why]
+2. [Second priority action]
+3. [Third priority action]
+4. [Bonus tip if time allows]
+
+━━━ END OF REPORT ━━━
+
+IMPORTANT RULES:
+- Write in plain English. No jargon, no corporate speak.
+- Be honest — if something is weak, say so. But always offer the fix.
+- Do NOT rewrite the resume. Give feedback, not a rewrite.
+- If job description is provided, cross-reference it throughout.
+- Score realistically — most resumes score 6-7/10 on first review.`,
         'tailorResume',
-        { jobDescription }
+        {}
       );
 
-      const data = parseAIJson(text);
-      return res.status(200).json({ success: true, data });
+      // Extract overall score from report text
+      const scoreMatch = text.match(/OVERALL SCORE:\s*(\d+(?:\.\d+)?)\s*/);
+      const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null;
+
+      return res.status(200).json({ success: true, data: { report: text, overallScore, provider } });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message || 'Failed to tailor resume' });
+      return res.status(500).json({ success: false, message: err.message || 'Failed to analyze resume' });
+    }
+  }
+
+  // Resume Analysis — protected version with auth + history save
+  if (action === 'resume-analysis' && method === 'POST') {
+    const { resume, jobDescription, targetRole } = body || {};
+    if (!resume) return res.status(400).json({ success: false, message: 'Resume is required' });
+
+    try {
+      await connectDB();
+      const decoded = await authMiddleware(req);
+      const authUser = await User.findById(decoded.id);
+      if (!authUser) return res.status(404).json({ success: false, message: 'User not found' });
+      if (authUser.status !== 'active') return res.status(403).json({ success: false, message: 'Account not active' });
+
+      const { text, provider } = await callAI(
+        `You are an expert resume reviewer and career coach with years of experience reviewing resumes for tech and professional roles.
+
+${targetRole ? `TARGET ROLE: ${targetRole}` : ''}
+${jobDescription ? `JOB DESCRIPTION:\n${jobDescription}\n` : ''}
+CANDIDATE RESUME:
+${resume}
+
+Analyze this resume and produce a detailed professional review report. Follow this EXACT format — do not deviate:
+
+━━━ RESUME REVIEW REPORT ━━━
+
+OVERALL SCORE: X/10
+[Give a realistic score. 9-10 = exceptional, 7-8 = strong, 5-6 = average, below 5 = needs significant work]
+
+STRENGTHS:
+• [Be specific — name actual skills, experiences, or achievements found in the resume]
+• [At least 2-3 concrete strengths]
+• [Focus on things the candidate actually did well]
+
+AREAS FOR IMPROVEMENT:
+• [Be specific and actionable — avoid generic advice]
+• [Name the exact problem and the exact fix]
+• [At least 3-5 concrete issues]
+
+SECTION-WISE FEEDBACK:
+
+Summary:
+[2-4 sentences. Is the summary specific to a role? Does it lead with achievements? Is the tone right?]
+
+Experience:
+[For each role mentioned, comment on: Do bullets show impact with metrics? Are action verbs strong? Is the progression clear?]
+
+Skills:
+[Which skills are relevant and well-presented? Which are missing based on the job description or role?]
+
+Projects:
+[Are projects described with outcomes? Tech stack mentioned? Individual contribution clear?]
+
+Education:
+[Is education section appropriate? Any certifications or courses that add value?]
+
+KEYWORD OPTIMIZATION:
+${jobDescription ? `Compare resume keywords against the job description:
+• MATCHED keywords (found in both): [list]
+• MISSING keywords (in job description, not in resume): [list]
+• SUGGESTED additions: [2-3 skills or terms to weave in naturally]
+` : `Based on the resume content, suggest 5-8 important keywords a hiring manager would look for:
+• [keyword 1]
+• [keyword 2]
+• ...
+`}
+ATS OPTIMIZATION TIPS:
+• [3-4 specific, actionable ATS tips — format, section headings, what to avoid, what to include]
+
+ACTIONABLE NEXT STEPS:
+1. [Specific, prioritized action — what to do first and why]
+2. [Second priority action]
+3. [Third priority action]
+4. [Bonus tip if time allows]
+
+━━━ END OF REPORT ━━━
+
+IMPORTANT RULES:
+- Write in plain English. No jargon, no corporate speak.
+- Be honest — if something is weak, say so. But always offer the fix.
+- Do NOT rewrite the resume. Give feedback, not a rewrite.
+- If job description is provided, cross-reference it throughout.
+- Score realistically — most resumes score 6-7/10 on first review.`,
+        'tailorResume',
+        {}
+      );
+
+      const scoreMatch = text.match(/OVERALL SCORE:\s*(\d+(?:\.\d+)?)\s*/);
+      const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null;
+
+      const analysis = await ResumeAnalysis.create({
+        userId: authUser._id,
+        resumeText: resume.slice(0, 10000),
+        jobDescription: jobDescription || '',
+        targetRole: targetRole || '',
+        report: text,
+        overallScore,
+        provider,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: { report: text, overallScore, provider, id: analysis._id.toString() },
+      });
+    } catch (err) {
+      if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+        return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+      }
+      return res.status(500).json({ success: false, message: err.message || 'Failed to analyze resume' });
+    }
+  }
+
+  // ============================================================
+  // IMAGE GENERATION (Pollinations — free, no API key)
+  // ============================================================
+
+  // Simple in-memory rate limiter (10 req/min per IP)
+  const imageRateLimiter = {};
+  const IMAGE_RATE_LIMIT = 10;
+  const IMAGE_RATE_WINDOW = 60000; // 1 minute
+
+  if (action === 'image' && method === 'POST') {
+    const { prompt } = body || {};
+    if (!prompt) return res.status(400).json({ success: false, message: 'Prompt is required' });
+
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+      || req.headers['x-real-ip']
+      || 'unknown';
+
+    const now = Date.now();
+    const entry = imageRateLimiter[clientIp] || { count: 0, resetAt: now + IMAGE_RATE_WINDOW };
+
+    if (now > entry.resetAt) {
+      entry.count = 0;
+      entry.resetAt = now + IMAGE_RATE_WINDOW;
+    }
+
+    if (entry.count >= IMAGE_RATE_LIMIT) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many image requests. Please wait a minute and try again.',
+      });
+    }
+
+    entry.count += 1;
+    imageRateLimiter[clientIp] = entry;
+
+    try {
+      const seed = Date.now();
+      const images = Array.from({ length: 3 }, (_, i) => ({
+        id: `img_${seed + i}`,
+        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seed + i}&width=768&height=768&nologo=true`,
+        prompt,
+      }));
+
+      return res.status(200).json({ success: true, data: { images, savedId: null } });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || 'Failed to generate images' });
     }
   }
 
@@ -209,6 +431,38 @@ export default async function handler(req, res) {
       const { text, provider } = await callAI(`Write a ${type || 'professional'} message.\n\nRecipient: ${recipientName}\nRole: ${recipientRole || ''}\nCompany: ${company || 'Target'}\nYour Background: ${yourBackground || ''}\nTarget Role: ${targetRole || ''}`, 'outreach', { type, recipientName, company, targetRole });
       if (user.aiCredits > 0) await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
       return res.status(200).json({ success: true, data: { message: text, provider, creditsRemaining: Math.max(0, user.aiCredits - 1) } });
+    }
+
+    // Resume Analysis — list history
+    if (action === 'resume-analyses' && method === 'GET') {
+      const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+      const skip = parseInt(req.query.skip) || 0;
+      const analyses = await ResumeAnalysis.find({ userId: user._id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('targetRole overallScore createdAt')
+        .lean();
+      const total = await ResumeAnalysis.countDocuments({ userId: user._id });
+      return res.status(200).json({ success: true, data: { analyses, total, limit, skip } });
+    }
+
+    // Resume Analysis — get single
+    if (action === 'resume-analysis' && method === 'GET') {
+      const id = req.query.id;
+      if (!id) return res.status(400).json({ success: false, message: 'Analysis ID required' });
+      const analysis = await ResumeAnalysis.findOne({ _id: id, userId: user._id }).lean();
+      if (!analysis) return res.status(404).json({ success: false, message: 'Analysis not found' });
+      return res.status(200).json({ success: true, data: analysis });
+    }
+
+    // Resume Analysis — delete
+    if (action === 'resume-analysis' && method === 'DELETE') {
+      const id = req.query.id;
+      if (!id) return res.status(400).json({ success: false, message: 'Analysis ID required' });
+      const deleted = await ResumeAnalysis.findOneAndDelete({ _id: id, userId: user._id });
+      if (!deleted) return res.status(404).json({ success: false, message: 'Analysis not found' });
+      return res.status(200).json({ success: true, data: { deleted: true } });
     }
 
     return res.status(404).json({ success: false, message: 'Route not found' });

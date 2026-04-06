@@ -1,4 +1,4 @@
-import { Bot, Zap, LayoutDashboard, Briefcase, Sparkles, BarChart3, FileText, Bookmark, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight, Mic, GraduationCap, Target, FileCheck } from 'lucide-react';
+import { Bot, Zap, LayoutDashboard, Briefcase, Sparkles, BarChart3, FileText, Bookmark, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight, Mic, GraduationCap, Target, FileCheck, ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,6 +15,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     { icon: Sparkles, label: 'AI Tools', path: '/ai-tools' },
     { icon: Target, label: 'Goal Tracker', path: '/goal-tracker' },
     { icon: FileCheck, label: 'Resume Tailor', path: '/resume-tailor' },
+    { icon: ImageIcon, label: 'Image Generator', path: '/image-generator' },
     { icon: Mic, label: 'Voice Over', path: '/voice-over' },
     { icon: GraduationCap, label: 'AI Interview', path: '/ai-interview' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },

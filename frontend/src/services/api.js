@@ -150,9 +150,31 @@ class ApiService {
   }
 
   async tailorResume(resume, jobDescription, targetRole) {
-    return this.request('/ai/tailor-resume', {
+    return this.request('/ai/resume-analysis', {
       method: 'POST',
       body: JSON.stringify({ resume, jobDescription, targetRole }),
+    });
+  }
+
+  async getResumeAnalyses(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/ai/resume-analyses${qs ? '?' + qs : ''}`);
+  }
+
+  async getResumeAnalysis(id) {
+    return this.request(`/ai/resume-analysis?id=${encodeURIComponent(id)}`);
+  }
+
+  async deleteResumeAnalysis(id) {
+    return this.request(`/ai/resume-analysis?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async generateImage(prompt) {
+    return this.request('/ai/image', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
     });
   }
 
