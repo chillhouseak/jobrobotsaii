@@ -52,18 +52,33 @@ const callGemini = async (prompt) => {
   return result.response.text();
 };
 
-// Safely parse AI JSON response — handles unescaped newlines in string values
+// Safely parse AI JSON response — handles unescaped newlines and text before/after JSON
 const parseAIJson = (text) => {
   // Find JSON bounds (first { to last })
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Invalid JSON response from AI');
+    throw new Error('AI did not return a valid JSON response');
   }
   let json = text.slice(start, end + 1);
-  // Replace unescaped newlines inside strings with \n escapes
-  json = json.replace(/([^\n\\])(\n)([^\n\\])/g, '$1\\n$3');
-  return JSON.parse(json);
+  // Replace unescaped newlines inside string values with \n escapes
+  // Match: newline NOT preceded by \ and NOT inside a string delimiter
+  let result = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (ch === '"' && (i === 0 || json[i - 1] !== '\\')) {
+      inString = !inString;
+      result += ch;
+    } else if (ch === '\n' && inString) {
+      result += '\\n';
+    } else if (ch === '\r') {
+      // skip
+    } else {
+      result += ch;
+    }
+  }
+  return JSON.parse(result);
 };
 
 const callAI = async (prompt, feature, context = {}) => {
