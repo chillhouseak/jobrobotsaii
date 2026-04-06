@@ -1,43 +1,12 @@
-import { Search, Bell, Menu, Command, Crown, ArrowRight } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Menu, Crown } from 'lucide-react';
+import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 
 const Header = ({ onMenuClick, onRightSidebarClick }) => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const searchRef = useRef(null);
   const { isDark } = useTheme();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  // Keyboard shortcut: Cmd/Ctrl+K to focus search
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsSearchVisible(true);
-        setTimeout(() => searchRef.current?.focus(), 50);
-      }
-      if (e.key === 'Escape') {
-        setSearchQuery('');
-        setIsSearchVisible(false);
-        searchRef.current?.blur();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const handleSearch = () => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    navigate(`/search?q=${encodeURIComponent(q)}`);
-    setSearchQuery('');
-    setIsSearchVisible(false);
-  };
 
   const pageTitles = {
     '/dashboard': 'Dashboard',
@@ -87,63 +56,6 @@ const Header = ({ onMenuClick, onRightSidebarClick }) => {
 
         {/* Right side */}
         <div className="flex items-center space-x-3">
-          {/* Desktop Search Bar */}
-          <div className="hidden md:flex items-center">
-            <div className={`relative flex items-center space-x-2 px-4 py-2 rounded-xl border transition-all duration-200 ${
-              isSearchFocused
-                ? 'bg-white/5 border-primary/50'
-                : isDark
-                  ? 'bg-white/5 border-white/10 hover:border-white/20'
-                  : 'bg-gray-100 border-black/10 hover:bg-gray-200'
-            }`}>
-              <Search className={`w-4 h-4 flex-shrink-0 ${isSearchFocused ? 'text-primary' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSearch();
-                  if (e.key === 'Escape') { setSearchQuery(''); searchRef.current?.blur(); }
-                }}
-                placeholder="Search..."
-                className={`w-40 bg-transparent text-sm outline-none placeholder-gray-500 ${
-                  isDark ? 'text-white' : 'text-gray-900'
-                }`}
-              />
-              {searchQuery ? (
-                <button
-                  onClick={handleSearch}
-                  className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-primary/20 text-primary text-xs font-medium hover:bg-primary/30 transition-colors"
-                >
-                  <span>Search</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              ) : (
-                <div className="flex items-center space-x-1">
-                  <kbd className={`text-xs px-1.5 py-0.5 rounded ${isDark ? 'text-gray-500 bg-gray-800' : 'text-gray-400 bg-gray-200'}`}>
-                    <Command className="w-3 h-3 inline" />
-                  </kbd>
-                  <kbd className={`text-xs px-1.5 py-0.5 rounded ${isDark ? 'text-gray-500 bg-gray-800' : 'text-gray-400 bg-gray-200'}`}>K</kbd>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Search Button */}
-          <button
-            onClick={() => setIsSearchVisible(true)}
-            className={`md:hidden p-2 rounded-xl transition-colors ${
-              isDark
-                ? 'bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300'
-                : 'bg-gray-100 border border-black/10 hover:bg-gray-200 text-gray-700'
-            }`}
-          >
-            <Search className="w-5 h-5" />
-          </button>
-
           {/* Right Sidebar Toggle */}
           <button
             onClick={onRightSidebarClick}
