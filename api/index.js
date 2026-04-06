@@ -18,8 +18,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies — limit to 4.5MB (Vercel serverless max)
+app.use(express.json({ limit: '4.5mb' }));
 
 // Mount route handlers
 app.use('/api/auth', authHandler);

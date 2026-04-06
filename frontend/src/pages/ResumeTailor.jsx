@@ -54,6 +54,15 @@ const ResumeTailor = () => {
   const tailorResume = async () => {
     if (!resume.trim() || !jobDescription.trim()) return;
 
+    const resumeBytes = new TextEncoder().encode(resume).length;
+    const jobBytes = new TextEncoder().encode(jobDescription).length;
+
+    // Vercel serverless limit is ~4.5MB; warn at 500KB
+    if (resumeBytes > 500000 || jobBytes > 500000) {
+      setError('Resume or job description is too large. Please reduce the text and try again.');
+      return;
+    }
+
     setIsGenerating(true);
     setError('');
     setResult(null);
@@ -64,7 +73,11 @@ const ResumeTailor = () => {
         setResult(response.data);
       }
     } catch (err) {
-      setError(err.message || 'Failed to tailor resume');
+      if (err.message && err.message.toLowerCase().includes('413')) {
+        setError('Content too large. Please shorten your resume or job description.');
+      } else {
+        setError(err.message || 'Failed to tailor resume');
+      }
     }
 
     setIsGenerating(false);
