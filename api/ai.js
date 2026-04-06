@@ -52,6 +52,20 @@ const callGemini = async (prompt) => {
   return result.response.text();
 };
 
+// Safely parse AI JSON response — handles unescaped newlines in string values
+const parseAIJson = (text) => {
+  // Find JSON bounds (first { to last })
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Invalid JSON response from AI');
+  }
+  let json = text.slice(start, end + 1);
+  // Replace unescaped newlines inside strings with \n escapes
+  json = json.replace(/([^\n\\])(\n)([^\n\\])/g, '$1\\n$3');
+  return JSON.parse(json);
+};
+
 const callAI = async (prompt, feature, context = {}) => {
   if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
     try { return { text: await callGroq(prompt), provider: 'groq' }; }
@@ -118,9 +132,7 @@ export default async function handler(req, res) {
         { goal, timeframe }
       );
 
-      const cleaned = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-      const plan = JSON.parse(cleaned);
-
+      const plan = parseAIJson(text);
       return res.status(200).json({ success: true, data: plan });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message || 'Failed to generate goal plan' });
@@ -139,8 +151,7 @@ export default async function handler(req, res) {
         { jobDescription }
       );
 
-      const cleaned = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-      const data = JSON.parse(cleaned);
+      const data = parseAIJson(text);
       return res.status(200).json({ success: true, data });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message || 'Failed to tailor resume' });
