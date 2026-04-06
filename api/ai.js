@@ -129,11 +129,22 @@ export default async function handler(req, res) {
 
   // Resume Tailor
   if (action === 'tailor-resume' && method === 'POST') {
-    try { await connectDB(); } catch (e) { return res.status(503).json({ success: false, message: e.message }); }
     const { resume, jobDescription, targetRole } = body || {};
     if (!resume || !jobDescription) return res.status(400).json({ success: false, message: 'Resume and job description required' });
-    const { text, provider } = await callAI(`Tailor this resume for the job description.\n\nResume:\n${resume}\n\nJob Description:\n${jobDescription}\n\nRewrite to highlight relevant skills. Return in markdown.`, 'tailorResume', { jobDescription });
-    return res.status(200).json({ success: true, data: { tailoredResume: text, provider } });
+
+    try {
+      const { text } = await callAI(
+        `You are an expert resume writer. Tailor this resume for the job description.\n\nResume:\n${resume}\n\nJob Description:\n${jobDescription}\n\n${targetRole ? `Target Role: ${targetRole}\n` : ''}\n\nReturn ONLY valid JSON with this exact structure, no markdown, no explanation:\n{\n  "tailoredSummary": "A rewritten professional summary optimized for this job",\n  "atsKeywords": ["keyword1", "keyword2", "keyword3"],\n  "missingKeywords": ["missing skill1", "missing skill2"],\n  "keyAdditions": ["Addition 1", "Addition 2"],\n  "relevantExperience": [\n    {"original": "Original bullet", "tailored": "Rewritten bullet with ATS keywords"}\n  ],\n  "skillsToHighlight": ["skill1", "skill2", "skill3"],\n  "tailoredResume": "Full resume rewritten in markdown format with ATS optimization"\n}`,
+        'tailorResume',
+        { jobDescription }
+      );
+
+      const cleaned = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+      const data = JSON.parse(cleaned);
+      return res.status(200).json({ success: true, data });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || 'Failed to tailor resume' });
+    }
   }
 
   // ============================================================
