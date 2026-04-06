@@ -108,11 +108,23 @@ export default async function handler(req, res) {
 
   // Goal Tracker
   if ((action === 'goal-tracker' || action === 'generate-goal') && method === 'POST') {
-    try { await connectDB(); } catch (e) { return res.status(503).json({ success: false, message: e.message }); }
     const { goal, timeframe, obstacles } = body || {};
     if (!goal) return res.status(400).json({ success: false, message: 'Goal is required' });
-    const { text, provider } = await callAI(`You are an expert career coach. Create a detailed, actionable plan.\n\nGoal: ${goal}\nTimeframe: ${timeframe || '3 months'}\nObstacles: ${obstacles || 'Limited time'}\n\nProvide phases, weekly tasks, and success metrics.`, 'goalTracker', { goal, timeframe });
-    return res.status(200).json({ success: true, data: { result: text, provider } });
+
+    try {
+      const { text } = await callAI(
+        `You are an expert career coach. Create a structured job goal plan in JSON format.\n\nGoal: ${goal}\nTimeframe: ${timeframe || '3 months'}\nObstacles: ${obstacles || 'Limited time'}\n\nRespond ONLY with valid JSON in this exact format, no markdown, no explanation:\n{\n  "goal": "the user's goal",\n  "targetDays": number,\n  "daysRemaining": number,\n  "phases": [\n    {\n      "phase": "Phase name",\n      "days": "duration",\n      "tasks": ["task 1", "task 2", "task 3"],\n      "milestone": "what to achieve"\n    }\n  ],\n  "weeklyTargets": ["target 1", "target 2", "target 3"],\n  "dailyActions": ["action 1", "action 2", "action 3"],\n  "successMetrics": ["metric 1", "metric 2", "metric 3"],\n  "suggestions": ["suggestion 1", "suggestion 2"]\n}`,
+        'goalTracker',
+        { goal, timeframe }
+      );
+
+      const cleaned = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+      const plan = JSON.parse(cleaned);
+
+      return res.status(200).json({ success: true, data: plan });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || 'Failed to generate goal plan' });
+    }
   }
 
   // Resume Tailor
