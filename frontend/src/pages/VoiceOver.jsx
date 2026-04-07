@@ -156,26 +156,15 @@ const VoiceOver = () => {
   const downloadAudio = () => {
     if (!voiceConfig) return;
 
-    if (isUsingElevenLabs && audioUrl) {
-      // Download actual audio file as blob
-      fetch(audioUrl)
-        .then(res => res.blob())
-        .then(blob => {
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = `voiceover-${Date.now()}.mp3`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-        })
-        .catch(() => {
-          // Fallback: download script as text
-          downloadScript();
-        });
+    if (audioUrl) {
+      // audioUrl is a data:audio/mpeg;base64,... URI — download directly
+      const a = document.createElement('a');
+      a.href = audioUrl;
+      a.download = `voiceover-${Date.now()}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } else {
-      // No ElevenLabs audio — download script as text
       downloadScript();
     }
   };
