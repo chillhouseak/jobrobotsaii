@@ -174,7 +174,7 @@ export default async function handler(req, res) {
 
     try {
       const seed = Date.now();
-      const images = Array.from({ length: 3 }, (_, i) => ({
+      const images = Array.from({ length: 1 }, (_, i) => ({
         id: `img_${seed + i}`,
         url: `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?seed=${seed + i}&width=768&height=768&nologo=true`,
         prompt: imgPrompt,
