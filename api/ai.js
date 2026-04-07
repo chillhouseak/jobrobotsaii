@@ -204,19 +204,33 @@ export default async function handler(req, res) {
     }
 
     const voiceId = elevenLabsVoices[voiceType]?.[tone] || elevenLabsVoices.male.professional;
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_monolingual_v1',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: speed === 'slow' ? 0.2 : speed === 'fast' ? 0.6 : 0.4, use_speaker_boost: true },
-      }),
-    });
+    let r;
+    try {
+      r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75, style: speed === 'slow' ? 0.2 : speed === 'fast' ? 0.6 : 0.4, use_speaker_boost: true },
+        }),
+      });
+    } catch (fetchErr) {
+      console.error('[VoiceOver] Fetch failed:', fetchErr.message);
+      return res.status(502).json({ success: false, message: 'Failed to reach ElevenLabs. Check your API key and try again.' });
+    }
 
     if (!r.ok) {
-      const errBody = await r.json().catch(() => ({}));
-      return res.status(502).json({ success: false, message: errBody.message || 'ElevenLabs API error. Please try again.' });
+      let errMsg = 'ElevenLabs API error. Please try again.';
+      try {
+        const errBody = await r.json();
+        errMsg = errBody.message || errBody.detail || errMsg;
+      } catch {
+        const errText = await r.text().catch(() => '');
+        if (errText) errMsg = errText.slice(0, 200);
+      }
+      console.error('[VoiceOver] ElevenLabs error:', r.status, errMsg);
+      return res.status(502).json({ success: false, message: errMsg });
     }
 
     const buf = await r.arrayBuffer();
