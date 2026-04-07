@@ -121,9 +121,7 @@ const ResumeTailor = () => {
   const [parsedReport, setParsedReport] = useState(null);
   const [rawReport, setRawReport] = useState('');
   const [error, setError] = useState('');
-  const [analysisId, setAnalysisId] = useState(null);
-
-  // UI state
+  const [reloadedAnalysis, setReloadedAnalysis] = useState(null);
   const [copied, setCopied] = useState(false);
 
   // History state
@@ -132,9 +130,6 @@ const ResumeTailor = () => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [loadingHistoryId, setLoadingHistoryId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-
-  // Reloaded analysis state (for viewing past analyses in the report view)
-  const [reloadedAnalysis, setReloadedAnalysis] = useState(null);
 
   const inputsDisabled = isGenerating;
 
@@ -196,7 +191,10 @@ const ResumeTailor = () => {
   };
 
   const analyzeResume = async () => {
-    if (!resume.trim()) return;
+    if (!resume.trim()) {
+      setError('Please enter or upload your resume first.');
+      return;
+    }
 
     const resumeBytes = new TextEncoder().encode(resume).length;
     if (resumeBytes > MAX_FILE_SIZE) {
@@ -208,7 +206,6 @@ const ResumeTailor = () => {
     setError('');
     setParsedReport(null);
     setRawReport('');
-    setAnalysisId(null);
     setReloadedAnalysis(null);
 
     try {
@@ -217,16 +214,17 @@ const ResumeTailor = () => {
         jobDescription.trim() || null,
         targetRole.trim() || null
       );
-      if (response.success) {
+      if (response.success && response.data?.report) {
         const parsed = parseReport(response.data.report);
         setParsedReport(parsed);
         setRawReport(response.data.report);
-        if (response.data.id) setAnalysisId(response.data.id);
         if (response.data.overallScore) {
           setParsedReport(prev => ({ ...prev, overallScore: response.data.overallScore }));
         }
         // Switch to report view
         setActiveTab('report');
+      } else {
+        setError(response.message || 'Analysis failed. Please try again.');
       }
     } catch (err) {
       if (err.message && err.message.toLowerCase().includes('413')) {
@@ -290,7 +288,6 @@ const ResumeTailor = () => {
   const reset = () => {
     setParsedReport(null);
     setRawReport('');
-    setAnalysisId(null);
     setError('');
     setReloadedAnalysis(null);
     setActiveTab('analyze');
