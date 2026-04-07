@@ -190,8 +190,8 @@ export default async function handler(req, res) {
   // VOICE OVER (ElevenLabs TTS only)
   // ================================================================
   const elevenLabsVoices = {
-    male: { professional: 'pFZjCF4NmKSf2CBqNZKu', friendly: 'CY6xposeDrqL9NY89L7j', confident: 'pFZjCF4NmKSf2CBqNZKu', calm: 'pFZjCF4NmKSf2CBqNZKu' },
-    female: { professional: 'EXAVITQu4vr4xnSDxMaL', friendly: 'FGY2WhTYpPnrSeqd7WKo', confident: 'TX3LPaxmHKxASX8yoLbQXGFY', calm: 'FGY2WhTYpPnrSeqd7WKo' },
+    male: { professional: 'wAGzRVkxKEs8La0lmdrE', friendly: 'wAGzRVkxKEs8La0lmdrE', confident: 'wAGzRVkxKEs8La0lmdrE', calm: 'wAGzRVkxKEs8La0lmdrE' },
+    female: { professional: 'wAGzRVkxKEs8La0lmdrE', friendly: 'wAGzRVkxKEs8La0lmdrE', confident: 'wAGzRVkxKEs8La0lmdrE', calm: 'wAGzRVkxKEs8La0lmdrE' },
   };
 
   if (action === 'voice-over' && method === 'POST') {
