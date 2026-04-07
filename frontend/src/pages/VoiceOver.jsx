@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Play, Pause, Download, RefreshCw, Bookmark, Loader2, Volume2, User, MessageSquare, Music } from 'lucide-react';
+import { Mic, Play, Pause, Download, RefreshCw, Bookmark, Loader2, Volume2, User, MessageSquare } from 'lucide-react';
 import Layout from '../components/Layout';
 import apiService from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -439,7 +439,7 @@ ${text}`.trim();
               </h3>
               {isUsingElevenLabs && (
                 <span className="flex items-center space-x-1 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
-                  <Music className="w-3 h-3" />
+                  <Volume2 className="w-3 h-3" />
                   <span>HD Audio</span>
                 </span>
               )}
@@ -485,18 +485,6 @@ ${text}`.trim();
                 ) : (
                   <Play className="w-7 h-7 text-white ml-1" />
                 )}
-              </button>
-
-              <button
-                onClick={stopVoiceOver}
-                disabled={!isPlaying}
-                className={`p-4 rounded-xl transition-all ${
-                  isDark
-                    ? 'bg-white/5 hover:bg-white/10 text-gray-400'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                } ${!isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Volume2 className="w-5 h-5" />
               </button>
 
               <button
