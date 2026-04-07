@@ -16,7 +16,6 @@ import AIInterview from './pages/AIInterview';
 import ExclusiveGuide from './pages/ExclusiveGuide';
 import VideoTraining from './pages/VideoTraining';
 import GoalTracker from './pages/GoalTracker';
-import ResumeTailor from './pages/ResumeTailor';
 import ImageGenerator from './pages/ImageGenerator';
 import Bonuses from './pages/Bonuses';
 import Upgrade from './pages/Upgrade';
@@ -212,14 +211,6 @@ function App() {
               element={
                 <ProtectedRoute>
                   <GoalTracker />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/resume-tailor"
-              element={
-                <ProtectedRoute>
-                  <ResumeTailor />
                 </ProtectedRoute>
               }
             />

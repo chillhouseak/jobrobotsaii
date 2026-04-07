@@ -25,7 +25,6 @@ const Header = ({ onMenuClick, onRightSidebarClick }) => {
     '/image-generator': 'Image Generator',
     '/voice-over': 'Voice Over',
     '/goal-tracker': 'Goal Tracker',
-    '/resume-tailor': 'Resume Tailor',
   };
 
   const currentTitle = pageTitles[location.pathname] || 'Dashboard';
