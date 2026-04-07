@@ -8,19 +8,91 @@ const HF_API_KEY = process.env.HF_API_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ================================================================
-// PROVIDERS
+// RESUME ANALYSIS HELPERS
 // ================================================================
 
-const callGroq = async (prompt) => {
+// Max resume chars per provider (tokens ≈ chars / 4; using a safe ratio)
+const RESUME_MAX_CHARS = {
+  groq:        6000,
+  huggingface: 3000,
+  gemini:     10000,
+  mock:       50000,
+};
+
+const clampResume = (resume, provider) => {
+  const max = RESUME_MAX_CHARS[provider] ?? 4000;
+  if (resume.length <= max) return resume;
+  // Truncate but keep the last line as a signal to the model
+  return resume.slice(0, max) + '\n\n[Resume truncated — review what is available above]';
+};
+
+// Extract OVERALL SCORE with multiple fallback patterns (case-insensitive, slash-optional)
+const extractScore = (text) => {
+  if (!text) return null;
+  // Primary: OVERALL SCORE: N/10
+  let m = text.match(/OVERALL\s+SCORE\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*\/?\s*10/i);
+  if (m) { const s = parseFloat(m[1]); if (s >= 0 && s <= 10) return s; }
+  // Secondary: SCORE: N/10
+  m = text.match(/^SCORE\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*\/?\s*10/im);
+  if (m) { const s = parseFloat(m[1]); if (s >= 0 && s <= 10) return s; }
+  // Tertiary: scan near keyword "SCORE" for N/10 within 40-char window
+  const scanStart = text.toUpperCase().indexOf('SCORE');
+  if (scanStart !== -1) {
+    const window = text.slice(scanStart, scanStart + 60);
+    m = window.match(/(\d+(?:\.\d+)?)\s*\/?\s*10/);
+    if (m) { const s = parseFloat(m[1]); if (s >= 0 && s <= 10) return s; }
+  }
+  return null;
+};
+
+// Validate that the report has minimum expected sections
+const validateReport = (text) => {
+  if (!text || text.length < 200) return false;
+  return /SCORE/i.test(text)
+    && /STRENGTHS/i.test(text)
+    && /AREAS?[\s\-]?FOR[\s\-]?IMPROVEMENT/i.test(text)
+    && /ACTIONABLE|NEXT[\s\-]?STEPS/i.test(text);
+};
+
+// Retry wrapper with exponential backoff
+const withRetry = async (fn, maxRetries = 2, baseDelayMs = 1500) => {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      if (result == null || (typeof result === 'string' && !result.trim())) {
+        throw new Error('Provider returned empty response');
+      }
+      return result;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.warn(`[AI] Attempt ${attempt + 1} failed: ${err.message}. Retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
+};
+
+// ================================================================
+// AI PROVIDERS
+// ================================================================
+
+const callGroq = async (prompt, resume) => {
   if (!GROQ_API_KEY || GROQ_API_KEY === 'your_groq_api_key_here') throw new Error('GROQ_NOT_CONFIGURED');
+  const truncatedResume = clampResume(resume, 'groq');
+  const actualPrompt = prompt.replace(resume, truncatedResume);
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1024,
+      messages: [{ role: 'user', content: actualPrompt }],
+      temperature: 0.3,
+      max_tokens: 2048,
+      stop: ['━━━ END OF REPORT ━━━'],
     }),
   });
   if (res.status === 429) throw new Error('GROQ_RATE_LIMITED');
@@ -29,22 +101,52 @@ const callGroq = async (prompt) => {
   return data.choices[0].message.content;
 };
 
-const callHuggingFace = async (prompt) => {
+const callHuggingFace = async (prompt, resume) => {
   const endpoint = 'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2';
-  const headers = HF_API_KEY ? { Authorization: `Bearer ${HF_API_KEY}` } : {};
-  const body = { inputs: prompt, parameters: { max_new_tokens: 512, temperature: 0.7, return_full_text: false } };
-  let res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-  if (res.status === 429) throw new Error('HF_RATE_LIMITED');
-  if (res.status === 503) {
-    await new Promise(r => setTimeout(r, 2000));
-    res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error('HF_UNAVAILABLE');
-  } else if (!res.ok) throw new Error(`HF error ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data) ? data[0]?.generated_text : data.generated_text || '';
+  const hfHeaders = HF_API_KEY ? { Authorization: `Bearer ${HF_API_KEY}` } : {};
+  const truncatedResume = clampResume(resume, 'huggingface');
+  const actualPrompt = prompt.replace(resume, truncatedResume);
+
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...hfHeaders },
+      body: JSON.stringify({
+        inputs: actualPrompt,
+        parameters: {
+          max_new_tokens: 1024,
+          temperature: 0.3,
+          top_p: 0.9,
+          return_full_text: false,
+        },
+      }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      let raw = Array.isArray(data) ? data[0]?.generated_text : data.generated_text || '';
+      // HF Inference API sometimes returns the prompt itself prepended — strip it
+      if (raw.startsWith(actualPrompt)) {
+        raw = raw.slice(actualPrompt.length).trim();
+      }
+      return raw;
+    }
+    if (r.status === 429) {
+      await new Promise(res => setTimeout(res, 3000 * (attempt + 1)));
+      continue;
+    }
+    if (r.status === 503) {
+      // Model still loading — give it time then retry
+      await new Promise(res => setTimeout(res, 3000));
+      continue;
+    }
+    lastError = new Error(`HF error ${r.status}`);
+    break;
+  }
+  throw lastError || new Error('HF exhausted retries');
 };
 
-const callGemini = async (prompt) => {
+const callGemini = async (prompt, resume) => {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') throw new Error('GEMINI_NOT_CONFIGURED');
   const { GoogleGenerativeAI } = require('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -53,17 +155,90 @@ const callGemini = async (prompt) => {
   return result.response.text();
 };
 
+// Mock report used when all providers fail
+const MOCK_TAILOR_RESUME = () => `━━━ RESUME REVIEW REPORT ━━━
+
+OVERALL SCORE: 7/10
+
+STRENGTHS:
+• Strong technical skill listing
+• Good project diversity
+• Clear work experience structure
+
+AREAS FOR IMPROVEMENT:
+• Missing quantifiable achievements in experience section
+• Summary is too generic and lacks impact
+• No ATS-optimized keywords
+
+SECTION-WISE FEEDBACK:
+
+Summary:
+Your summary is too broad. Rewrite it to be specific to your target role and include 1-2 key achievements with metrics.
+
+Experience:
+• Add metrics to every bullet (e.g., "improved performance by 30%")
+• Use stronger action verbs: Led, Architected, Scaled instead of Worked on, Involved in
+• Quantify team size, budget, or impact where possible
+
+Skills:
+Organize skills into categories: Languages, Frameworks, Tools, Soft Skills. Remove outdated or irrelevant skills. Add keywords from the job description.
+
+Projects:
+Add measurable outcomes to project descriptions. Include tech stack used in each project.
+
+Education:
+Education section is present. Consider adding relevant certifications or courses that strengthen the profile.
+
+KEYWORD OPTIMIZATION:
+• MATCHED: technical skills, work experience
+• MISSING: specific frameworks from job description
+• SUGGESTED: add 2-3 key terms from target job posting
+
+ATS OPTIMIZATION TIPS:
+• Use standard section headings: Experience, Education, Skills (not "My Work History")
+• Avoid tables, columns, or complex formatting
+• Place keywords naturally — ATS scans for exact keyword matches
+• Keep file format simple: .docx or .pdf (not .pages)
+
+ACTIONABLE NEXT STEPS:
+1. Rewrite your professional summary with 2 specific achievements
+2. Add metrics to your top 3 experience bullets
+3. Cross-reference the job description and add missing keywords to your skills section
+
+━━━ END OF REPORT ━━━`;
+
+// ================================================================
+// LEGACY callAI — used by answer, cover-letter, outreach, goal-tracker
+// ================================================================
+const callAI = async (prompt, feature, context = {}) => {
+  if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
+    try { return { text: await callGroq(prompt, ''), provider: 'groq' }; }
+    catch (e) { if (e.message !== 'GROQ_RATE_LIMITED') console.warn('[AI] Groq failed:', e.message); else console.warn('[AI] Groq rate limited...'); }
+  }
+  try { return { text: await callHuggingFace(prompt, ''), provider: 'huggingface' }; }
+  catch (e) { console.warn('[AI] HuggingFace failed:', e.message); }
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
+    try { return { text: await callGemini(prompt, ''), provider: 'gemini' }; }
+    catch (e) { console.warn('[AI] Gemini failed:', e.message); }
+  }
+  // Mock fallback
+  const mocks = {
+    answer: (r, t, l) => { const m = { professional: "Thank you for the opportunity. With my background in this field, I have developed strong skills in problem-solving and collaboration. I am excited about this opportunity.", friendly: "Hey! I'm really excited about this. I've been working in this space and I love solving tricky problems.", confident: "I am the ideal candidate. With proven expertise in this domain, I have consistently exceeded expectations." }; let x = m[t] || m.professional; if (l === 'short') x = x.split('.')[0] + '.'; if (l === 'long') x = x + ' ' + m[t]; return x; },
+    coverLetter: (c, r, e) => `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${r} position at ${c}. With my background in ${e || 'software development'}, I believe I would be a valuable addition to your team.\n\nThank you for considering my application.\n\nSincerely`,
+    outreach: (t, n, c, g) => `Hi ${n},\n\nI hope this message finds you well! I'm exploring opportunities in ${g || 'software development'} and came across your profile.\n\nI would love to connect.\n\nBest regards`,
+    goalTracker: (g, f) => `# Action Plan: ${g}\n\n**Timeframe:** ${f || '3 months'}\n\n## Phase 1 (Weeks 1-2): Research & Preparation\n- Research the target role and industry\n- Update resume and LinkedIn profile\n\n## Phase 2 (Weeks 3-6): Active Search\n- Apply to 3-5 positions per week\n- Network with professionals\n\n## Phase 3 (Weeks 7-10): Interviews\n- Prepare for each interview\n- Send thank-you notes\n\n## Phase 4 (Weeks 11-12): Decision\n- Evaluate offers\n- Plan transition`,
+    tailorResume: MOCK_TAILOR_RESUME,
+  };
+  const fallback = { answer: mocks.answer(context.role, context.tone, context.length), coverLetter: mocks.coverLetter(context.company, context.role, context.experience), outreach: mocks.outreach(context.type, context.recipientName, context.company, context.targetRole), goalTracker: mocks.goalTracker(context.goal, context.timeframe), tailorResume: mocks.tailorResume() };
+  return { text: fallback[feature] || 'AI service unavailable.', provider: 'mock' };
+};
+
 // Safely parse AI JSON response — handles unescaped newlines and text before/after JSON
 const parseAIJson = (text) => {
-  // Find JSON bounds (first { to last })
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error('AI did not return a valid JSON response');
-  }
+  if (start === -1 || end === -1 || end <= start) throw new Error('AI did not return a valid JSON response');
   let json = text.slice(start, end + 1);
-  // Replace unescaped newlines inside string values with \n escapes
-  // Match: newline NOT preceded by \ and NOT inside a string delimiter
   let result = '';
   let inString = false;
   for (let i = 0; i < json.length; i++) {
@@ -80,29 +255,6 @@ const parseAIJson = (text) => {
     }
   }
   return JSON.parse(result);
-};
-
-const callAI = async (prompt, feature, context = {}) => {
-  if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
-    try { return { text: await callGroq(prompt), provider: 'groq' }; }
-    catch (e) { if (e.message !== 'GROQ_RATE_LIMITED') console.warn('[AI] Groq failed:', e.message); else console.warn('[AI] Groq rate limited...'); }
-  }
-  try { return { text: await callHuggingFace(prompt), provider: 'huggingface' }; }
-  catch (e) { console.warn('[AI] HuggingFace failed:', e.message); }
-  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
-    try { return { text: await callGemini(prompt), provider: 'gemini' }; }
-    catch (e) { console.warn('[AI] Gemini failed:', e.message); }
-  }
-  // Mock fallback
-  const mocks = {
-    answer: (r, t, l) => { const m = { professional: "Thank you for the opportunity. With my background in this field, I have developed strong skills in problem-solving and collaboration. I am excited about this opportunity.", friendly: "Hey! I'm really excited about this. I've been working in this space and I love solving tricky problems.", confident: "I am the ideal candidate. With proven expertise in this domain, I have consistently exceeded expectations." }; let x = m[t] || m.professional; if (l === 'short') x = x.split('.')[0] + '.'; if (l === 'long') x = x + ' ' + m[t]; return x; },
-    coverLetter: (c, r, e) => `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${r} position at ${c}. With my background in ${e || 'software development'}, I believe I would be a valuable addition to your team.\n\nThank you for considering my application.\n\nSincerely`,
-    outreach: (t, n, c, g) => `Hi ${n},\n\nI hope this message finds you well! I'm exploring opportunities in ${g || 'software development'} and came across your profile.\n\nI would love to connect.\n\nBest regards`,
-    goalTracker: (g, f) => `# Action Plan: ${g}\n\n**Timeframe:** ${f || '3 months'}\n\n## Phase 1 (Weeks 1-2): Research & Preparation\n- Research the target role and industry\n- Update resume and LinkedIn profile\n\n## Phase 2 (Weeks 3-6): Active Search\n- Apply to 3-5 positions per week\n- Network with professionals\n\n## Phase 3 (Weeks 7-10): Interviews\n- Prepare for each interview\n- Send thank-you notes\n\n## Phase 4 (Weeks 11-12): Decision\n- Evaluate offers\n- Plan transition`,
-    tailorResume: () => `━━━ RESUME REVIEW REPORT ━━━\n\nOVERALL SCORE: 7/10\n\nSTRENGTHS:\n• Strong technical skill listing\n• Good project diversity\n• Clear work experience\n\nAREAS FOR IMPROVEMENT:\n• Missing quantifiable achievements in experience section\n• Summary is too generic and lacks impact\n• No ATS-optimized keywords\n\nSECTION-WISE FEEDBACK:\n\nSummary:\nYour summary is too broad. Rewrite it to be specific to your target role and include 1-2 key achievements with metrics.\n\nExperience:\n• Add metrics to every bullet (e.g., "improved performance by 30%")\n• Use stronger action verbs: Led, Architected, Scaled instead of Worked on, Involved in\n• Quantify team size, budget, or impact where possible\n\nSkills:\n• Organize skills into categories: Languages, Frameworks, Tools, Soft Skills\n• Remove outdated or irrelevant skills\n• Add keywords from the job description\n\nProjects:\n• Add measurable outcomes to project descriptions\n• Include tech stack used in each project\n\nATS OPTIMIZATION TIPS:\n• Use standard section headings: Experience, Education, Skills (not "My Work History")\n• Avoid tables, columns, or complex formatting\n• Place keywords naturally — ATS scans for exact keyword matches\n• Keep file format simple: .docx or .pdf (not .pages)\n\nACTIONABLE NEXT STEPS:\n1. Rewrite your professional summary with 2 specific achievements\n2. Add metrics to your top 3 experience bullets\n3. Cross-reference the job description and add missing keywords to your skills section`,
-  };
-  const fallback = { answer: mocks.answer(context.role, context.tone, context.length), coverLetter: mocks.coverLetter(context.company, context.role, context.experience), outreach: mocks.outreach(context.type, context.recipientName, context.company, context.targetRole), goalTracker: mocks.goalTracker(context.goal, context.timeframe), tailorResume: mocks.tailorResume(context.jobDescription) };
-  return { text: fallback[feature] || 'AI service unavailable.', provider: 'mock' };
 };
 
 // ================================================================
@@ -132,11 +284,7 @@ export default async function handler(req, res) {
   const action = getAction(req.url);
   const { method, body } = req;
 
-  // ============================================================
-  // PUBLIC ROUTES
-  // ============================================================
-
-  // Goal Tracker
+  // Goal Tracker (public)
   if ((action === 'goal-tracker' || action === 'generate-goal') && method === 'POST') {
     const { goal, timeframe, obstacles } = body || {};
     if (!goal) return res.status(400).json({ success: false, message: 'Goal is required' });
@@ -155,88 +303,10 @@ export default async function handler(req, res) {
     }
   }
 
-  // Resume Tailor
-  if (action === 'tailor-resume' && method === 'POST') {
-    const { resume, jobDescription, targetRole } = body || {};
-    if (!resume) return res.status(400).json({ success: false, message: 'Resume is required' });
-
-    try {
-      const { text, provider } = await callAI(
-        `You are an expert resume reviewer and career coach with years of experience reviewing resumes for tech and professional roles.
-
-${targetRole ? `TARGET ROLE: ${targetRole}` : ''}
-${jobDescription ? `JOB DESCRIPTION:\n${jobDescription}\n` : ''}
-CANDIDATE RESUME:
-${resume}
-
-Analyze this resume and produce a detailed professional review report. Follow this EXACT format — do not deviate:
-
-━━━ RESUME REVIEW REPORT ━━━
-
-OVERALL SCORE: X/10
-[Give a realistic score. 9-10 = exceptional, 7-8 = strong, 5-6 = average, below 5 = needs significant work]
-
-STRENGTHS:
-• [Be specific — name actual skills, experiences, or achievements found in the resume]
-• [At least 2-3 concrete strengths]
-• [Focus on things the candidate actually did well]
-
-AREAS FOR IMPROVEMENT:
-• [Be specific and actionable — avoid generic advice]
-• [Name the exact problem and the exact fix]
-• [At least 3-5 concrete issues]
-
-SECTION-WISE FEEDBACK:
-
-Summary:
-[2-4 sentences. Is the summary specific to a role? Does it lead with achievements? Is the tone right?]
-
-Experience:
-[For each role mentioned, comment on: Do bullets show impact with metrics? Are action verbs strong? Is the progression clear?]
-
-Skills:
-[Which skills are relevant and well-presented? Which are missing based on the job description or role?]
-
-Projects:
-[Are projects described with outcomes? Tech stack mentioned? Individual contribution clear?]
-
-Education:
-[Is education section appropriate? Any certifications or courses that add value?]
-
-KEYWORD OPTIMIZATION:
-${jobDescription ? `Compare resume keywords against the job description:\n• MATCHED keywords (found in both): [list]\n• MISSING keywords (in job description, not in resume): [list]\n• SUGGESTED additions: [2-3 skills or terms to weave in naturally]\n` : `Based on the resume content, suggest 5-8 important keywords a hiring manager would look for:\n• [keyword 1]\n• [keyword 2]\n• ...\n`}
-ATS OPTIMIZATION TIPS:
-• [3-4 specific, actionable ATS tips — format, section headings, what to avoid, what to include]
-
-ACTIONABLE NEXT STEPS:
-1. [Specific, prioritized action — what to do first and why]
-2. [Second priority action]
-3. [Third priority action]
-4. [Bonus tip if time allows]
-
-━━━ END OF REPORT ━━━
-
-IMPORTANT RULES:
-- Write in plain English. No jargon, no corporate speak.
-- Be honest — if something is weak, say so. But always offer the fix.
-- Do NOT rewrite the resume. Give feedback, not a rewrite.
-- If job description is provided, cross-reference it throughout.
-- Score realistically — most resumes score 6-7/10 on first review.`,
-        'tailorResume',
-        {}
-      );
-
-      // Extract overall score from report text
-      const scoreMatch = text.match(/OVERALL SCORE:\s*(\d+(?:\.\d+)?)\s*/);
-      const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null;
-
-      return res.status(200).json({ success: true, data: { report: text, overallScore, provider } });
-    } catch (err) {
-      return res.status(500).json({ success: false, message: err.message || 'Failed to analyze resume' });
-    }
-  }
-
-  // Resume Analysis — protected version with auth + history save
+  // ================================================================
+  // RESUME ANALYSIS — protected (auth + history save)
+  // Uses direct provider calls with retries instead of callAI()
+  // ================================================================
   if (action === 'resume-analysis' && method === 'POST') {
     const { resume, jobDescription, targetRole } = body || {};
     if (!resume) return res.status(400).json({ success: false, message: 'Resume is required' });
@@ -248,81 +318,99 @@ IMPORTANT RULES:
       if (!authUser) return res.status(404).json({ success: false, message: 'User not found' });
       if (authUser.status !== 'active') return res.status(403).json({ success: false, message: 'Account not active' });
 
-      const { text, provider } = await callAI(
-        `You are an expert resume reviewer and career coach with years of experience reviewing resumes for tech and professional roles.
+      // Build prompt with shorter placeholders for small-model compatibility
+      const targetSection = targetRole ? `\nTARGET ROLE: ${targetRole}` : '';
+      const jdSection = jobDescription
+        ? `\nJOB DESCRIPTION:\n${jobDescription}`
+        : '\nJOB DESCRIPTION: (not provided)';
 
-${targetRole ? `TARGET ROLE: ${targetRole}` : ''}
-${jobDescription ? `JOB DESCRIPTION:\n${jobDescription}\n` : ''}
-CANDIDATE RESUME:
-${resume}
-
-Analyze this resume and produce a detailed professional review report. Follow this EXACT format — do not deviate:
+      const PROMPT = `You are an expert resume reviewer. Output ONLY a review report in this exact format. Do not add any text before or after the report.
 
 ━━━ RESUME REVIEW REPORT ━━━
 
 OVERALL SCORE: X/10
-[Give a realistic score. 9-10 = exceptional, 7-8 = strong, 5-6 = average, below 5 = needs significant work]
 
 STRENGTHS:
-• [Be specific — name actual skills, experiences, or achievements found in the resume]
-• [At least 2-3 concrete strengths]
-• [Focus on things the candidate actually did well]
+• bullet 1
+• bullet 2
+• bullet 3
 
 AREAS FOR IMPROVEMENT:
-• [Be specific and actionable — avoid generic advice]
-• [Name the exact problem and the exact fix]
-• [At least 3-5 concrete issues]
+• bullet 1
+• bullet 2
+• bullet 3
 
 SECTION-WISE FEEDBACK:
-
-Summary:
-[2-4 sentences. Is the summary specific to a role? Does it lead with achievements? Is the tone right?]
-
-Experience:
-[For each role mentioned, comment on: Do bullets show impact with metrics? Are action verbs strong? Is the progression clear?]
-
-Skills:
-[Which skills are relevant and well-presented? Which are missing based on the job description or role?]
-
-Projects:
-[Are projects described with outcomes? Tech stack mentioned? Individual contribution clear?]
-
-Education:
-[Is education section appropriate? Any certifications or courses that add value?]
+Summary: [2-4 sentences]
+Experience: [2-4 sentences]
+Skills: [2-4 sentences]
+Projects: [2-4 sentences]
+Education: [2-4 sentences]
 
 KEYWORD OPTIMIZATION:
-${jobDescription ? `Compare resume keywords against the job description:
-• MATCHED keywords (found in both): [list]
-• MISSING keywords (in job description, not in resume): [list]
-• SUGGESTED additions: [2-3 skills or terms to weave in naturally]
-` : `Based on the resume content, suggest 5-8 important keywords a hiring manager would look for:
-• [keyword 1]
-• [keyword 2]
-• ...
-`}
+• MATCHED: [list]
+• MISSING: [list]
+• SUGGESTED: [list]
+
 ATS OPTIMIZATION TIPS:
-• [3-4 specific, actionable ATS tips — format, section headings, what to avoid, what to include]
+• tip 1
+• tip 2
+• tip 3
 
 ACTIONABLE NEXT STEPS:
-1. [Specific, prioritized action — what to do first and why]
-2. [Second priority action]
-3. [Third priority action]
-4. [Bonus tip if time allows]
+1. step 1
+2. step 2
+3. step 3
 
 ━━━ END OF REPORT ━━━
 
-IMPORTANT RULES:
-- Write in plain English. No jargon, no corporate speak.
-- Be honest — if something is weak, say so. But always offer the fix.
-- Do NOT rewrite the resume. Give feedback, not a rewrite.
-- If job description is provided, cross-reference it throughout.
-- Score realistically — most resumes score 6-7/10 on first review.`,
-        'tailorResume',
-        {}
-      );
+${targetSection}${jdSection}
+CANDIDATE RESUME:
+${resume}`;
 
-      const scoreMatch = text.match(/OVERALL SCORE:\s*(\d+(?:\.\d+)?)\s*/);
-      const overallScore = scoreMatch ? parseFloat(scoreMatch[1]) : null;
+      let text = '';
+      let provider = 'mock';
+
+      // Provider priority: Groq → Gemini → HuggingFace
+      const groqAvailable = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here';
+      const geminiAvailable = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here';
+
+      if (groqAvailable) {
+        try {
+          text = await withRetry(() => callGroq(PROMPT, resume), 2, 1500);
+          provider = 'groq';
+        } catch (err) {
+          console.warn(`[AI] Groq failed after retries: ${err.message}`);
+        }
+      }
+
+      if (!text && geminiAvailable) {
+        try {
+          text = await withRetry(() => callGemini(PROMPT, resume), 2, 1500);
+          provider = 'gemini';
+        } catch (err) {
+          console.warn(`[AI] Gemini failed after retries: ${err.message}`);
+        }
+      }
+
+      if (!text) {
+        try {
+          text = await withRetry(() => callHuggingFace(PROMPT, resume), 3, 2000);
+          provider = 'huggingface';
+        } catch (err) {
+          console.warn(`[AI] HuggingFace failed after retries: ${err.message}`);
+        }
+      }
+
+      // Last resort: mock when all providers fail or output is invalid
+      if (!text || !validateReport(text)) {
+        console.warn('[AI] All providers failed or returned invalid output — using mock');
+        text = MOCK_TAILOR_RESUME();
+        provider = 'mock';
+      }
+
+      let overallScore = extractScore(text);
+      if (overallScore !== null && (overallScore < 0 || overallScore > 10)) overallScore = null;
 
       const analysis = await ResumeAnalysis.create({
         userId: authUser._id,
@@ -346,18 +434,16 @@ IMPORTANT RULES:
     }
   }
 
-  // ============================================================
+  // ================================================================
   // IMAGE GENERATION (Pollinations — free, no API key)
-  // ============================================================
-
-  // Simple in-memory rate limiter (10 req/min per IP)
+  // ================================================================
   const imageRateLimiter = {};
   const IMAGE_RATE_LIMIT = 10;
-  const IMAGE_RATE_WINDOW = 60000; // 1 minute
+  const IMAGE_RATE_WINDOW = 60000;
 
   if (action === 'image' && method === 'POST') {
-    const { prompt } = body || {};
-    if (!prompt) return res.status(400).json({ success: false, message: 'Prompt is required' });
+    const { prompt: imgPrompt } = body || {};
+    if (!imgPrompt) return res.status(400).json({ success: false, message: 'Prompt is required' });
 
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
       || req.headers['x-real-ip']
@@ -370,14 +456,9 @@ IMPORTANT RULES:
       entry.count = 0;
       entry.resetAt = now + IMAGE_RATE_WINDOW;
     }
-
     if (entry.count >= IMAGE_RATE_LIMIT) {
-      return res.status(429).json({
-        success: false,
-        message: 'Too many image requests. Please wait a minute and try again.',
-      });
+      return res.status(429).json({ success: false, message: 'Too many image requests. Please wait a minute and try again.' });
     }
-
     entry.count += 1;
     imageRateLimiter[clientIp] = entry;
 
@@ -385,19 +466,18 @@ IMPORTANT RULES:
       const seed = Date.now();
       const images = Array.from({ length: 3 }, (_, i) => ({
         id: `img_${seed + i}`,
-        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seed + i}&width=768&height=768&nologo=true`,
-        prompt,
+        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?seed=${seed + i}&width=768&height=768&nologo=true`,
+        prompt: imgPrompt,
       }));
-
       return res.status(200).json({ success: true, data: { images, savedId: null } });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message || 'Failed to generate images' });
     }
   }
 
-  // ============================================================
-  // PROTECTED ROUTES
-  // ============================================================
+  // ================================================================
+  // OTHER PROTECTED ROUTES (status, answer, cover-letter, outreach, resume-analyses)
+  // ================================================================
   try {
     await connectDB();
     const decoded = await authMiddleware(req);
@@ -418,17 +498,17 @@ IMPORTANT RULES:
     }
 
     if (action === 'cover-letter' && method === 'POST') {
-      const { company, role, jobDescription, experience } = body || {};
+      const { company, role, jobDescription: jd, experience } = body || {};
       if (!company || !role) return res.status(400).json({ success: false, message: 'Company and role required' });
-      const { text, provider } = await callAI(`Write a cover letter.\n\nCompany: ${company}\nRole: ${role}\nJob Description: ${jobDescription || 'Not provided'}\nExperience: ${experience || 'Relevant experience'}`, 'coverLetter', { company, role, experience });
+      const { text, provider } = await callAI(`Write a cover letter.\n\nCompany: ${company}\nRole: ${role}\nJob Description: ${jd || 'Not provided'}\nExperience: ${experience || 'Relevant experience'}`, 'coverLetter', { company, role, experience });
       if (user.aiCredits > 0) await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1, resumeGenerations: 1 } });
       return res.status(200).json({ success: true, data: { coverLetter: text, provider, creditsRemaining: Math.max(0, user.aiCredits - 1) } });
     }
 
     if (action === 'outreach' && method === 'POST') {
-      const { type, recipientName, recipientRole, company, yourBackground, targetRole } = body || {};
+      const { type, recipientName, recipientRole, company, yourBackground, targetRole: tgtRole } = body || {};
       if (!recipientName) return res.status(400).json({ success: false, message: 'Recipient name required' });
-      const { text, provider } = await callAI(`Write a ${type || 'professional'} message.\n\nRecipient: ${recipientName}\nRole: ${recipientRole || ''}\nCompany: ${company || 'Target'}\nYour Background: ${yourBackground || ''}\nTarget Role: ${targetRole || ''}`, 'outreach', { type, recipientName, company, targetRole });
+      const { text, provider } = await callAI(`Write a ${type || 'professional'} message.\n\nRecipient: ${recipientName}\nRole: ${recipientRole || ''}\nCompany: ${company || 'Target'}\nYour Background: ${yourBackground || ''}\nTarget Role: ${tgtRole || ''}`, 'outreach', { type, recipientName, company, targetRole: tgtRole });
       if (user.aiCredits > 0) await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
       return res.status(200).json({ success: true, data: { message: text, provider, creditsRemaining: Math.max(0, user.aiCredits - 1) } });
     }
