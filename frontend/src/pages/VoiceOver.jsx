@@ -154,19 +154,35 @@ const VoiceOver = () => {
   };
 
   const downloadAudio = () => {
+    if (!voiceConfig) return;
+
     if (isUsingElevenLabs && audioUrl) {
-      // Download ElevenLabs audio
-      const link = document.createElement('a');
-      link.href = audioUrl;
-      link.download = `voiceover-${Date.now()}.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Download actual audio file as blob
+      fetch(audioUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `voiceover-${Date.now()}.mp3`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        })
+        .catch(() => {
+          // Fallback: download script as text
+          downloadScript();
+        });
     } else {
-      // Download script as text
-      const element = document.createElement('a');
-      const fileContent = `
-Voice Over Script
+      // No ElevenLabs audio — download script as text
+      downloadScript();
+    }
+  };
+
+  const downloadScript = () => {
+    const element = document.createElement('a');
+    const fileContent = `Voice Over Script
 =================
 
 Voice Type: ${voiceType}
@@ -176,16 +192,13 @@ Character Count: ${voiceConfig?.characterCount || text.length}
 
 ---
 
-${text}
-      `.trim();
+${text}`.trim();
 
-      element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(fileContent));
-      element.setAttribute('download', `voiceover-script-${Date.now()}.txt`);
-      element.style.display = 'none';
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-    }
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(fileContent));
+    element.setAttribute('download', `voiceover-script-${Date.now()}.txt`);
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
   };
 
   const saveVoiceOver = () => {
