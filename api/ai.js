@@ -405,9 +405,10 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
         const buffer = Buffer.from(fileData, 'base64');
 
         if (fileType === 'pdf') {
-          const pdfParse = (await import('pdf-parse')).default;
-          const pdfData = await pdfParse(buffer);
-          resumeText = pdfData.text;
+          const { PDFParse } = await import('pdf-parse');
+          const pdfParser = new PDFParse({ data: buffer });
+          const textResult = await pdfParser.getText();
+          resumeText = textResult.text;
         } else if (fileType === 'docx') {
           const mammoth = (await import('mammoth')).default;
           const result = await mammoth.extractRawText({ buffer });

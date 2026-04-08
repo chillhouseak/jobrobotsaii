@@ -51,10 +51,16 @@ const Resume = () => {
     setError('');
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result; // data:application/pdf;base64,...
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
 
       const fileType = file.type === 'application/pdf' || file.name.endsWith('.pdf') ? 'pdf' : 'docx';
 
