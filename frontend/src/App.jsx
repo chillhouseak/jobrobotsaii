@@ -9,6 +9,7 @@ import Applications from './pages/Applications';
 import AITools from './pages/AITools';
 import Analytics from './pages/Analytics';
 import Library from './pages/Library';
+import Resume from './pages/Resume';
 import Settings from './pages/Settings';
 import VoiceOver from './pages/VoiceOver';
 import AIInterview from './pages/AIInterview';
@@ -122,6 +123,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Library />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/resume"
+              element={
+                <ProtectedRoute>
+                  <Resume />
                 </ProtectedRoute>
               }
             />

@@ -1,4 +1,4 @@
-import { Bot, Zap, LayoutDashboard, Briefcase, Sparkles, BarChart3, Bookmark, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight, Mic, GraduationCap, Target, ImageIcon } from 'lucide-react';
+import { Bot, Zap, LayoutDashboard, Briefcase, Sparkles, BarChart3, FileText, Bookmark, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight, Mic, GraduationCap, Target, ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     { icon: Mic, label: 'Voice Over', path: '/voice-over' },
     { icon: GraduationCap, label: 'AI Interview', path: '/ai-interview' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+    { icon: FileText, label: 'Resume', path: '/resume' },
     { icon: Bookmark, label: 'Library', path: '/library' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

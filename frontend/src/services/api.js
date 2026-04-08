@@ -156,6 +156,13 @@ class ApiService {
     });
   }
 
+  async analyzeResume(fileData, fileType) {
+    return this.request('/ai/resume-analyze', {
+      method: 'POST',
+      body: JSON.stringify({ fileData, fileType }),
+    });
+  }
+
   async generateGoalTracker(goal, targetDays, currentProgress) {
     // Map frontend params to backend params
     const timeframe = targetDays ? `${targetDays} days` : '60 days';

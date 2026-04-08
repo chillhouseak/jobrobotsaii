@@ -393,6 +393,225 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
       return res.status(200).json({ success: true, data: { message: text, provider, creditsRemaining: Math.max(0, user.aiCredits - 1) } });
     }
 
+    // ================================================================
+    // RESUME ANALYSIS
+    // ================================================================
+    const MAX_FILE_SIZE = 3 * 1024 * 1024;
+    const MAX_TEXT_CHARS = 13000;
+    const MIN_TEXT_CHARS = 50;
+
+    const extractResumeText = async (buffer, fileType) => {
+      if (fileType === 'docx') {
+        const mammoth = (await import('mammoth')).default;
+        const result = await mammoth.extractRawText({ buffer });
+        return { method: 'mammoth', text: result.value };
+      }
+
+      if (fileType === 'pdf') {
+        // Method 1: pdf-parse v1 (legacy, most reliable for serverless)
+        let text = '';
+        try {
+          const parsePdf = (await import('pdf-parse')).default || (await import('pdf-parse'));
+          const data = await parsePdf(buffer);
+          if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+            return { method: 'pdf-parse-v1', text: data.text };
+          }
+        } catch (e) {
+          console.warn('[Resume] pdf-parse v1 failed:', e.message);
+        }
+
+        // Method 2: pdf-parse v2 CJS
+        try {
+          const { PDFParse } = await import('pdf-parse/dist/pdf-parse/cjs/index.cjs');
+          PDFParse.setWorker();
+          const parser = new PDFParse({ data: buffer });
+          const result = await parser.getText();
+          if (result?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+            return { method: 'pdf-parse-v2', text: result.text };
+          }
+        } catch (e) {
+          console.warn('[Resume] pdf-parse v2 failed:', e.message);
+        }
+
+        // Method 3: pdfjs-dist legacy (CDN worker)
+        try {
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
+          const doc = await pdfjs.getDocument({ data: buffer }).promise;
+          let pageTexts = '';
+          for (let i = 1; i <= Math.min(doc.numPages, 5); i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
+          }
+          if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
+            return { method: 'pdfjs-dist', text: pageTexts };
+          }
+        } catch (e) {
+          console.warn('[Resume] pdfjs-dist failed:', e.message);
+        }
+
+        // Method 4: Tesseract OCR for scanned/image PDFs
+        try {
+          const { createWorker } = await import('tesseract.js');
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
+          const doc = await pdfjs.getDocument({ data: buffer }).promise;
+          const pagesToCheck = Math.min(doc.numPages, 3);
+          let ocrText = '';
+
+          for (let i = 1; i <= pagesToCheck; i++) {
+            const page = await doc.getPage(i);
+            const viewport = page.getViewport({ scale: 2 });
+            const w = Math.floor(viewport.width);
+            const h = Math.floor(viewport.height);
+            // Use Buffer.allocate for raw RGBA pixels (works in serverless)
+            const pixelCount = w * h * 4;
+            const rawPixels = Buffer.alloc(pixelCount, 0);
+            const mockCanvas = { width: w, height: h };
+            const ctx = {
+              buffer: rawPixels, width: w, height: h,
+              fillRect: () => {},
+              putImageData: () => {},
+            };
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            // Convert RGBA Buffer to ImageData-compatible format
+            const imageData = new Uint8ClampedArray(rawPixels);
+            const worker = await createWorker('eng', 1, { logger: m => {} });
+            const { data } = await worker.recognize(imageData);
+            await worker.terminate();
+            ocrText += (data?.text || '') + '\n';
+          }
+          if (ocrText.trim().length >= MIN_TEXT_CHARS) {
+            return { method: 'tesseract-ocr', text: ocrText };
+          }
+        } catch (e) {
+          console.warn('[Resume] Tesseract OCR failed:', e.message);
+        }
+
+        return null;
+      }
+
+      return null;
+    };
+
+    if (action === 'resume-analyze' && method === 'POST') {
+      const { fileData, fileType } = body || {};
+      if (!fileData) return res.status(400).json({ success: false, message: 'No file provided' });
+
+      if (!['pdf', 'docx'].includes(fileType)) {
+        return res.status(400).json({ success: false, message: 'Unsupported file format. Use PDF or DOCX.' });
+      }
+
+      let buffer;
+      try {
+        buffer = Buffer.from(fileData, 'base64');
+      } catch {
+        return res.status(400).json({ success: false, message: 'Invalid file data' });
+      }
+
+      if (buffer.length > MAX_FILE_SIZE) {
+        return res.status(400).json({ success: false, message: 'File too large. Maximum 3MB.' });
+      }
+      if (buffer.length < 100) {
+        return res.status(400).json({ success: false, message: 'File appears empty or corrupted' });
+      }
+
+      let extraction;
+      try {
+        extraction = await extractResumeText(buffer, fileType);
+      } catch (err) {
+        console.error('[Resume] All extraction methods threw:', err.message);
+        return res.status(400).json({ success: false, message: 'Failed to read file. Try a text-based PDF or DOCX.' });
+      }
+
+      if (!extraction || extraction.text.trim().length < MIN_TEXT_CHARS) {
+        return res.status(400).json({
+          success: false,
+          message: 'Could not extract enough text. This may be a scanned image PDF — try a text-based resume instead.',
+        });
+      }
+
+      let resumeText = extraction.text.trim();
+      const extractionMethod = extraction.method;
+      if (resumeText.length > MAX_TEXT_CHARS) {
+        resumeText = resumeText.slice(0, MAX_TEXT_CHARS);
+      }
+
+      const prompt = `You are an expert ATS (Applicant Tracking System) resume analyst. Analyze the resume below and score it realistically. Be honest and specific.
+
+RESUME TEXT:
+${resumeText}
+
+Analyze carefully and return ONLY valid JSON with this exact structure (no markdown, no explanation, no text before or after):
+{
+  "score": number between 0 and 100,
+  "summary": "2-3 sentence overall assessment of this resume's quality and ATS compatibility",
+  "keywordsFound": ["keyword or skill found in resume 1", "keyword or skill found 2", "keyword or skill found 3"],
+  "keywordsMissing": ["important keyword, skill, or section that should be included 1", "missing item 2", "missing item 3"],
+  "improvements": [
+    {"text": "specific actionable improvement", "priority": "high", "section": "relevant section name"},
+    {"text": "specific actionable improvement", "priority": "high", "section": "relevant section name"},
+    {"text": "specific actionable improvement", "priority": "medium", "section": "relevant section name"},
+    {"text": "specific actionable improvement", "priority": "low", "section": "relevant section name"}
+  ],
+  "sectionScores": {
+    "contact": number between 0 and 100,
+    "summary": number between 0 and 100,
+    "experience": number between 0 and 100,
+    "education": number between 0 and 100,
+    "skills": number between 0 and 100,
+    "formatting": number between 0 and 100
+  },
+  "atsTips": ["ATS optimization tip 1", "ATS optimization tip 2", "ATS optimization tip 3"]
+}`;
+
+      let analysis;
+      try {
+        const { text: rawText } = await callAI(prompt, 'answer', {});
+
+        // Safe JSON parsing — find first { and last }
+        let parsed = null;
+        try {
+          const start = rawText.indexOf('{');
+          const end = rawText.lastIndexOf('}');
+          if (start !== -1 && end !== -1 && end > start) {
+            const jsonStr = rawText.slice(start, end + 1)
+              .replace(/\r\n/g, ' ').replace(/\n/g, ' ')
+              .replace(/,\s*([}\]])/g, '$1');
+            parsed = JSON.parse(jsonStr);
+          }
+        } catch {
+          parsed = null;
+        }
+
+        if (parsed && typeof parsed.score === 'number' && parsed.score >= 0 && parsed.score <= 100) {
+          analysis = parsed;
+        } else {
+          return res.status(500).json({ success: false, message: 'AI returned an invalid response. Please try again.' });
+        }
+      } catch (aiErr) {
+        console.error('[Resume] AI analysis failed:', aiErr.message);
+        return res.status(500).json({ success: false, message: 'AI analysis failed. Please try again.' });
+      }
+
+      if (user.aiCredits > 0) {
+        await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          analysis,
+          extractionMethod,
+          resumeTextLength: resumeText.length,
+          creditsRemaining: Math.max(0, user.aiCredits - 1),
+        },
+      });
+    }
+
     return res.status(404).json({ success: false, message: 'Route not found' });
   } catch (error) {
     console.error('AI error:', error);

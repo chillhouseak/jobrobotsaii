@@ -16,7 +16,7 @@
     "mongoose": "^8.8.4",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
     "tesseract.js": "^7.0.0"
   }
 }
