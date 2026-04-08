@@ -404,11 +404,11 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
       try {
         const buffer = Buffer.from(fileData, 'base64');
 
-        if (fileType === 'pdf' || (file.name || '').endsWith('.pdf')) {
+        if (fileType === 'pdf') {
           const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(buffer);
           resumeText = pdfData.text;
-        } else if (fileType === 'docx' || (file.name || '').endsWith('.docx')) {
+        } else if (fileType === 'docx') {
           const mammoth = (await import('mammoth')).default;
           const result = await mammoth.extractRawText({ buffer });
           resumeText = result.value;
