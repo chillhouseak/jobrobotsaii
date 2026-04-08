@@ -400,102 +400,60 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
     const MAX_TEXT_CHARS = 13000;
     const MIN_TEXT_CHARS = 50;
 
-    const extractResumeText = async (buffer, fileType) => {
-      if (fileType === 'docx') {
-        const mammoth = (await import('mammoth')).default;
-        const result = await mammoth.extractRawText({ buffer });
-        return { method: 'mammoth', text: result.value };
+   const extractResumeText = async (buffer, fileType) => {
+  if (fileType === 'docx') {
+    const mammoth = (await import('mammoth')).default;
+    const result = await mammoth.extractRawText({ buffer });
+    return { method: 'mammoth', text: result.value };
+  }
+
+  if (fileType === 'pdf') {
+
+    // Method 1: pdf-parse — guard against serverless ENOENT bug
+    try {
+      // Suppress the test-file read that crashes in serverless
+      const pdfParse = await import('pdf-parse').then(m => m.default || m).catch(() => null);
+      if (pdfParse) {
+        const data = await pdfParse(buffer, { max: 0 }); // max:0 skips test file
+        if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+          return { method: 'pdf-parse', text: data.text };
+        }
       }
+    } catch (e) {
+      console.warn('[Resume] pdf-parse failed:', e.message);
+    }
 
-      if (fileType === 'pdf') {
-        // Method 1: pdf-parse v1 (legacy, most reliable for serverless)
-        let text = '';
-        try {
-          const parsePdf = (await import('pdf-parse')).default || (await import('pdf-parse'));
-          const data = await parsePdf(buffer);
-          if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
-            return { method: 'pdf-parse-v1', text: data.text };
-          }
-        } catch (e) {
-          console.warn('[Resume] pdf-parse v1 failed:', e.message);
-        }
+    // Method 2: pdfjs-dist — NO worker (server-side safe)
+    try {
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      // ✅ Disable worker — required for Node.js/serverless environments
+      pdfjs.GlobalWorkerOptions.workerSrc = false;
 
-        // Method 2: pdf-parse v2 CJS
-        try {
-          const { PDFParse } = await import('pdf-parse/dist/pdf-parse/cjs/index.cjs');
-          PDFParse.setWorker();
-          const parser = new PDFParse({ data: buffer });
-          const result = await parser.getText();
-          if (result?.text?.trim()?.length >= MIN_TEXT_CHARS) {
-            return { method: 'pdf-parse-v2', text: result.text };
-          }
-        } catch (e) {
-          console.warn('[Resume] pdf-parse v2 failed:', e.message);
-        }
+      const doc = await pdfjs.getDocument({
+        data: new Uint8Array(buffer),
+        useWorkerFetch: false,
+        isEvalSupported: false,
+        useSystemFonts: true,
+      }).promise;
 
-        // Method 3: pdfjs-dist legacy (CDN worker)
-        try {
-          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-          pdfjs.GlobalWorkerOptions.workerSrc =
-            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
-          const doc = await pdfjs.getDocument({ data: buffer }).promise;
-          let pageTexts = '';
-          for (let i = 1; i <= Math.min(doc.numPages, 5); i++) {
-            const page = await doc.getPage(i);
-            const content = await page.getTextContent();
-            pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
-          }
-          if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
-            return { method: 'pdfjs-dist', text: pageTexts };
-          }
-        } catch (e) {
-          console.warn('[Resume] pdfjs-dist failed:', e.message);
-        }
-
-        // Method 4: Tesseract OCR for scanned/image PDFs
-        try {
-          const { createWorker } = await import('tesseract.js');
-          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-          pdfjs.GlobalWorkerOptions.workerSrc =
-            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
-          const doc = await pdfjs.getDocument({ data: buffer }).promise;
-          const pagesToCheck = Math.min(doc.numPages, 3);
-          let ocrText = '';
-
-          for (let i = 1; i <= pagesToCheck; i++) {
-            const page = await doc.getPage(i);
-            const viewport = page.getViewport({ scale: 2 });
-            const w = Math.floor(viewport.width);
-            const h = Math.floor(viewport.height);
-            // Use Buffer.allocate for raw RGBA pixels (works in serverless)
-            const pixelCount = w * h * 4;
-            const rawPixels = Buffer.alloc(pixelCount, 0);
-            const mockCanvas = { width: w, height: h };
-            const ctx = {
-              buffer: rawPixels, width: w, height: h,
-              fillRect: () => {},
-              putImageData: () => {},
-            };
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            // Convert RGBA Buffer to ImageData-compatible format
-            const imageData = new Uint8ClampedArray(rawPixels);
-            const worker = await createWorker('eng', 1, { logger: m => {} });
-            const { data } = await worker.recognize(imageData);
-            await worker.terminate();
-            ocrText += (data?.text || '') + '\n';
-          }
-          if (ocrText.trim().length >= MIN_TEXT_CHARS) {
-            return { method: 'tesseract-ocr', text: ocrText };
-          }
-        } catch (e) {
-          console.warn('[Resume] Tesseract OCR failed:', e.message);
-        }
-
-        return null;
+      let pageTexts = '';
+      for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
       }
+      if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
+        return { method: 'pdfjs-dist', text: pageTexts };
+      }
+    } catch (e) {
+      console.warn('[Resume] pdfjs-dist failed:', e.message);
+    }
 
-      return null;
-    };
+    return null;
+  }
+
+  return null;
+};
 
     if (action === 'resume-analyze' && method === 'POST') {
       const { fileData, fileType } = body || {};
