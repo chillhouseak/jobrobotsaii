@@ -405,10 +405,20 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
         const buffer = Buffer.from(fileData, 'base64');
 
         if (fileType === 'pdf') {
-          const { PDFParse } = await import('pdf-parse');
-          const pdfParser = new PDFParse({ data: buffer });
-          const textResult = await pdfParser.getText();
-          resumeText = textResult.text;
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          const workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
+          pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+          const loadingTask = pdfjs.getDocument({ data: buffer });
+          const pdf = await loadingTask.promise;
+          let fullText = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map(item => ('str' in item ? item.str : '')).join(' ');
+            fullText += pageText + '\n';
+          }
+          await pdf.cleanup();
+          resumeText = fullText;
         } else if (fileType === 'docx') {
           const mammoth = (await import('mammoth')).default;
           const result = await mammoth.extractRawText({ buffer });
@@ -426,8 +436,9 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
           resumeText = resumeText.slice(0, 15000);
         }
       } catch (parseErr) {
-        console.error('[Resume] Parse error:', parseErr.message);
-        return res.status(400).json({ success: false, message: 'Failed to read file. Please upload a valid PDF or DOCX.' });
+        console.error('[Resume] Parse error details:', parseErr.message, parseErr.stack);
+        const errMsg = parseErr.message || 'unknown error';
+        return res.status(400).json({ success: false, message: `Failed to read file: ${errMsg}` });
       }
 
       const analysisPrompt = `You are an expert ATS (Applicant Tracking System) resume analyst. Analyze the following resume and provide a detailed assessment.
