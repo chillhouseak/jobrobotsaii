@@ -1,17 +1,47 @@
-import { Bot, Zap, TrendingUp, Target, FileText, MessageSquare, ArrowRight, Plus, Clock, Sparkles, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, Zap, TrendingUp, Target, FileText, MessageSquare, ArrowRight, Plus, Clock, Sparkles, Mail, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
+import apiService from '../services/api';
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadApplications = async () => {
+      try {
+        const res = await apiService.getApplications();
+        if (res.success) {
+          setApplications(res.data.applications);
+        }
+      } catch (err) {
+        console.error('Failed to load applications:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadApplications();
+  }, []);
+
+  // Derive real stats from fetched applications
+  const totalApplications = applications.length;
+  const interviewsScheduled = applications.filter(a => a.status === 'interview' || a.status === 'final').length;
+  const offersReceived = applications.filter(a => a.status === 'offer').length;
+
+  // Weekly count: applications added in the last 7 days
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const thisWeekCount = applications.filter(a => new Date(a.createdAt) >= oneWeekAgo).length;
 
   const stats = [
-    { label: 'Total Applications', value: '0', icon: FileText, color: 'from-blue-500 to-blue-600', trend: '+0 this week' },
-    { label: 'Interviews Scheduled', value: '0', icon: Target, color: 'from-amber-500 to-amber-600', trend: 'No upcoming' },
-    { label: 'Offers Received', value: '0', icon: TrendingUp, color: 'from-emerald-500 to-emerald-600', trend: 'Keep going!' },
-    { label: 'AI Credits', value: '10', icon: Zap, color: 'from-violet-500 to-violet-600', trend: '/ 10 remaining' },
+    { label: 'Total Applications', value: String(totalApplications), icon: FileText, color: 'from-blue-500 to-blue-600', trend: `+${thisWeekCount} this week` },
+    { label: 'Interviews Scheduled', value: String(interviewsScheduled), icon: Target, color: 'from-amber-500 to-amber-600', trend: interviewsScheduled > 0 ? `${interviewsScheduled} active` : 'No upcoming' },
+    { label: 'Offers Received', value: String(offersReceived), icon: TrendingUp, color: 'from-emerald-500 to-emerald-600', trend: offersReceived > 0 ? 'Congrats!' : 'Keep going!' },
+    { label: 'AI Credits', value: String(user?.aiCredits ?? 10), icon: Zap, color: 'from-violet-500 to-violet-600', trend: '/ 10 remaining' },
   ];
 
   const quickActions = [
@@ -21,7 +51,16 @@ const Dashboard = () => {
     { title: 'Cold Outreach', desc: 'LinkedIn & Email', icon: Mail, path: '/ai-tools', color: 'from-emerald-500/20 to-teal-500/20' },
   ];
 
-  const recentActivity = [];
+  // Recent activity: last 5 applications sorted by createdAt
+  const recentActivity = [...applications]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5)
+    .map(app => ({
+      id: app._id,
+      icon: FileText,
+      text: `${app.company} — ${app.role}`,
+      time: new Date(app.createdAt).toLocaleDateString(),
+    }));
 
   const aiFeatures = [];
 
@@ -49,7 +88,11 @@ const Dashboard = () => {
                 </div>
                 <span className="text-xs text-gray-500 bg-white/5 px-2 py-1 rounded-full">{stat.trend}</span>
               </div>
-              <h3 className="text-3xl font-bold text-white mb-1">{stat.value}</h3>
+              {loading ? (
+                <Loader2 className="w-6 h-6 animate-spin text-primary mb-1" />
+              ) : (
+                <h3 className="text-3xl font-bold text-white mb-1">{stat.value}</h3>
+              )}
               <p className="text-sm text-gray-400">{stat.label}</p>
             </div>
           ))}
@@ -84,40 +127,42 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* AI Features */}
-            <div className="glass-card p-6 mt-6">
-              <h2 className="text-lg font-semibold text-white mb-5 flex items-center space-x-2">
-                <Bot className="w-5 h-5 text-accent-light" />
-                <span>AI Features</span>
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {aiFeatures.map((feature, index) => (
-                  <button
-                    key={index}
-                    onClick={() => navigate('/ai-tools')}
-                    className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-accent/30 transition-all duration-300 text-left group"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                        <Bot className="w-5 h-5 text-accent-light" />
+            {/* AI Features (only if populated) */}
+            {aiFeatures.length > 0 && (
+              <div className="glass-card p-6 mt-6">
+                <h2 className="text-lg font-semibold text-white mb-5 flex items-center space-x-2">
+                  <Bot className="w-5 h-5 text-accent-light" />
+                  <span>AI Features</span>
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {aiFeatures.map((feature, index) => (
+                    <button
+                      key={index}
+                      onClick={() => navigate('/ai-tools')}
+                      className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-accent/30 transition-all duration-300 text-left group"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+                          <Bot className="w-5 h-5 text-accent-light" />
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          feature.badge === 'New' ? 'bg-emerald-500/20 text-emerald-400' :
+                          feature.badge === 'Popular' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-violet-500/20 text-violet-400'
+                        }`}>
+                          {feature.badge}
+                        </span>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        feature.badge === 'New' ? 'bg-emerald-500/20 text-emerald-400' :
-                        feature.badge === 'Popular' ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-violet-500/20 text-violet-400'
-                      }`}>
-                        {feature.badge}
-                      </span>
-                    </div>
-                    <h3 className="text-white font-semibold mb-1">{feature.title}</h3>
-                    <p className="text-xs text-gray-400">{feature.desc}</p>
-                  </button>
-                ))}
+                      <h3 className="text-white font-semibold mb-1">{feature.title}</h3>
+                      <p className="text-xs text-gray-400">{feature.desc}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Sidebar - Activity & Profile */}
+          {/* Sidebar */}
           <div className="space-y-6">
             {/* Recent Activity */}
             <div className="glass-card p-6">
@@ -125,26 +170,35 @@ const Dashboard = () => {
                 <Clock className="w-5 h-5 text-primary-light" />
                 <span>Recent Activity</span>
               </h2>
-              <div className="space-y-3">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <activity.icon className="w-4 h-4 text-primary-light" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white">{activity.text}</p>
-                      <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {recentActivity.length === 0 && (
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : recentActivity.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-8 h-8 text-gray-500" />
                   </div>
                   <p className="text-sm text-gray-400">No recent activity</p>
                   <p className="text-xs text-gray-500 mt-1">Start by adding an application</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentActivity.map((activity) => (
+                    <div
+                      key={activity.id}
+                      onClick={() => navigate('/applications')}
+                      className="flex items-start space-x-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <activity.icon className="w-4 h-4 text-primary-light" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{activity.text}</p>
+                        <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
