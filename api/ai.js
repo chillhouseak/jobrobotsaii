@@ -396,49 +396,181 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
     // ================================================================
     // RESUME ANALYSIS (AI-powered, real data from uploaded resume)
     // ================================================================
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
+    const MAX_TEXT_CHARS = 12000;
+    const MIN_TEXT_CHARS = 30;
+
+    const extractTextFromPDF = async (buffer) => {
+      const texts = [];
+
+      // Method 1: pdf-parse v2
+      try {
+        const { PDFParse } = await import('pdf-parse/dist/pdf-parse/cjs/index.cjs');
+        PDFParse.setWorker();
+        const parser = new PDFParse({ data: buffer });
+        const result = await parser.getText();
+        if (result?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+          texts.push({ method: 'pdf-parse-v2', text: result.text.trim() });
+        }
+      } catch (e) {
+        console.warn('[Resume] pdf-parse-v2 failed:', e.message);
+      }
+
+      // Method 2: pdfjs-dist legacy (CDN worker)
+      try {
+        if (!texts.find(t => t.method === 'pdf-parse-v2')) {
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
+          const doc = await pdfjs.getDocument({ data: buffer }).promise;
+          let pageTexts = '';
+          for (let i = 1; i <= doc.numPages; i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
+          }
+          if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
+            texts.push({ method: 'pdfjs-dist', text: pageTexts.trim() });
+          }
+        }
+      } catch (e) {
+        console.warn('[Resume] pdfjs-dist failed:', e.message);
+      }
+
+      // Method 3: pdf-parse v1 (legacy, if v2 fails)
+      try {
+        if (texts.length === 0) {
+          const parsePdf = (await import('pdf-parse')).default;
+          if (parsePdf) {
+            const data = await parsePdf(buffer);
+            if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+              texts.push({ method: 'pdf-parse-v1', text: data.text.trim() });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Resume] pdf-parse-v1 failed:', e.message);
+      }
+
+      // Method 4: OCR via tesseract.js for scanned/image PDFs
+      if (texts.length === 0 || texts[0].text.length < MIN_TEXT_CHARS) {
+        try {
+          const { createWorker } = await import('tesseract.js');
+          // Use PDF.js to render pages as images, then OCR them
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
+          const doc = await pdfjs.getDocument({ data: buffer }).promise;
+          const pagesToCheck = Math.min(doc.numPages, 3);
+          let ocrText = '';
+          for (let i = 1; i <= pagesToCheck; i++) {
+            const page = await doc.getPage(i);
+            const scale = 2;
+            const viewport = page.getViewport({ scale });
+            // Render page to raw RGBA pixels
+            const canvas = {
+              width: Math.floor(viewport.width),
+              height: Math.floor(viewport.height),
+              getContext: () => ({
+                fillRect: () => {},
+                putImageData: () => {},
+              }),
+            };
+            const context = canvas.getContext('2d');
+            await page.render({ canvasContext: context, viewport }).promise;
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const worker = await createWorker('eng', 1, {
+              logger: () => {},
+            });
+            const { data } = await worker.recognize(imageData);
+            await worker.terminate();
+            ocrText += (data?.text || '') + '\n';
+          }
+          if (ocrText.trim().length >= MIN_TEXT_CHARS) {
+            texts.push({ method: 'ocr-tesseract', text: ocrText.trim() });
+          }
+        } catch (e) {
+          console.warn('[Resume] OCR failed:', e.message);
+        }
+      }
+
+      return texts;
+    };
+
+    const extractTextFromDOCX = async (buffer) => {
+      const texts = [];
+      // Method 1: mammoth
+      try {
+        const mammoth = (await import('mammoth')).default;
+        const result = await mammoth.extractRawText({ buffer });
+        if (result?.value?.trim()?.length >= MIN_TEXT_CHARS) {
+          texts.push({ method: 'mammoth', text: result.value.trim() });
+        }
+      } catch (e) {
+        console.warn('[Resume] mammoth failed:', e.message);
+      }
+      return texts;
+    };
+
     if (action === 'resume-analyze' && method === 'POST') {
       const { fileData, fileType } = body || {};
       if (!fileData) return res.status(400).json({ success: false, message: 'No file provided' });
 
-      let resumeText = '';
+      let buffer;
       try {
-        const buffer = Buffer.from(fileData, 'base64');
+        buffer = Buffer.from(fileData, 'base64');
+      } catch {
+        return res.status(400).json({ success: false, message: 'Invalid base64 data' });
+      }
 
+      if (buffer.length > MAX_FILE_SIZE) {
+        return res.status(400).json({ success: false, message: 'File too large. Maximum size is 3MB.' });
+      }
+
+      if (buffer.length < 100) {
+        return res.status(400).json({ success: false, message: 'File appears empty or corrupted' });
+      }
+
+      let extractionResults = [];
+      let extractionError = null;
+
+      try {
         if (fileType === 'pdf') {
-          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-          const workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/legacy/build/pdf.worker.min.mjs';
-          pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-          const loadingTask = pdfjs.getDocument({ data: buffer });
-          const pdf = await loadingTask.promise;
-          let fullText = '';
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            const pageText = content.items.map(item => ('str' in item ? item.str : '')).join(' ');
-            fullText += pageText + '\n';
-          }
-          await pdf.cleanup();
-          resumeText = fullText;
+          extractionResults = await extractTextFromPDF(buffer);
         } else if (fileType === 'docx') {
-          const mammoth = (await import('mammoth')).default;
-          const result = await mammoth.extractRawText({ buffer });
-          resumeText = result.value;
+          extractionResults = await extractTextFromDOCX(buffer);
         } else {
-          // Try as plain text
-          resumeText = buffer.toString('utf-8');
+          return res.status(400).json({ success: false, message: 'Unsupported file format. Use PDF or DOCX.' });
         }
+      } catch (err) {
+        console.error('[Resume] All extraction methods threw:', err.message);
+        extractionError = err.message;
+      }
 
-        resumeText = resumeText.trim();
-        if (!resumeText || resumeText.length < 50) {
-          return res.status(400).json({ success: false, message: 'Could not extract text from this file. Try a different PDF or DOCX.' });
+      if (extractionResults.length === 0) {
+        console.error('[Resume] All extraction failed. Error:', extractionError);
+        if (extractionError?.includes('canvas')) {
+          return res.status(400).json({ success: false, message: 'Scanned PDF detected, rendering failed. Try a text-based PDF.' });
         }
-        if (resumeText.length > 15000) {
-          resumeText = resumeText.slice(0, 15000);
-        }
-      } catch (parseErr) {
-        console.error('[Resume] Parse error details:', parseErr.message, parseErr.stack);
-        const errMsg = parseErr.message || 'unknown error';
-        return res.status(400).json({ success: false, message: `Failed to read file: ${errMsg}` });
+        return res.status(400).json({
+          success: false,
+          message: 'Could not extract text from this file. Try a text-based PDF or DOCX instead of a scanned image.',
+        });
+      }
+
+      // Use the best result (longest text = most likely to have content)
+      const best = extractionResults.reduce((a, b) => a.text.length > b.text.length ? a : b);
+      let resumeText = best.text.trim();
+
+      if (resumeText.length < MIN_TEXT_CHARS) {
+        return res.status(400).json({
+          success: false,
+          message: `Extracted text too short (${resumeText.length} chars). This may be a scanned PDF — try a text-based resume.`,
+        });
+      }
+
+      if (resumeText.length > MAX_TEXT_CHARS) {
+        resumeText = resumeText.slice(0, MAX_TEXT_CHARS);
       }
 
       const analysisPrompt = `You are an expert ATS (Applicant Tracking System) resume analyst. Analyze the following resume and provide a detailed assessment.
