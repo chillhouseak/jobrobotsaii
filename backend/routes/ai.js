@@ -25,12 +25,8 @@ const initGemini = async () => {
   }
 };
 
+// FIX: Only call initGemini once on startup — removed duplicate IIFE
 initGemini();
-
-// Initialize on module load
-(async () => {
-  await initGemini();
-})();
 
 // Helper function for AI generation
 const generateWithAI = async (prompt) => {
@@ -46,6 +42,32 @@ const generateWithAI = async (prompt) => {
     console.error('Gemini API error:', error.message);
     return null;
   }
+};
+
+// Helper: strip markdown fences and parse JSON from AI response
+// FIX: centralised helper used by all routes that parse JSON from Gemini
+const parseAIJson = (text) => {
+  const clean = text.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/, '')
+    .replace(/\s*```$/, '');
+  // Find first { and last } to tolerate leading/trailing prose
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) throw new Error('No JSON object found in AI response');
+  return JSON.parse(clean.slice(start, end + 1));
+};
+
+// Helper: strip markdown fences and parse JSON array from AI response
+const parseAIJsonArray = (text) => {
+  const clean = text.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/, '')
+    .replace(/\s*```$/, '');
+  const start = clean.indexOf('[');
+  const end = clean.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) throw new Error('No JSON array found in AI response');
+  return JSON.parse(clean.slice(start, end + 1));
 };
 
 // Mock responses for when Gemini is not configured
@@ -97,7 +119,7 @@ Best regards`
 
   coverLetter: (company, role, experience) => `Dear Hiring Manager,
 
-I am writing to express my enthusiastically interest in the ${role} position at ${company}. With my background in ${experience || 'software development'} and passion for delivering exceptional results, I believe I would be a valuable addition to your team.
+I am writing to express my enthusiastic interest in the ${role} position at ${company}. With my background in ${experience || 'software development'} and passion for delivering exceptional results, I believe I would be a valuable addition to your team.
 
 Throughout my career, I have developed strong skills that align well with your requirements. I am particularly drawn to ${company} because of its innovative approach and commitment to excellence.
 
@@ -266,11 +288,20 @@ Generate 5 interview questions with sample answers that:
 - Include the STAR method for behavioral questions
 - Are specific and memorable
 
-Format as JSON with questions and detailed answers.`;
+Respond ONLY with valid JSON (no markdown, no explanation) with this exact structure:
+{
+  "questions": [
+    {"question": "question text", "type": "behavioral", "answer": "sample answer"},
+    {"question": "question text", "type": "behavioral", "answer": "sample answer"},
+    {"question": "question text", "type": "behavioral", "answer": "sample answer"},
+    {"question": "question text", "type": "behavioral", "answer": "sample answer"},
+    {"question": "question text", "type": "behavioral", "answer": "sample answer"}
+  ]
+}`;
 
     const aiResponse = await generateWithAI(prompt);
 
-    // Mock data
+    // Mock data fallback
     const mockData = {
       questions: [
         {
@@ -301,11 +332,22 @@ Format as JSON with questions and detailed answers.`;
       ]
     };
 
+    // FIX: strip markdown fences before parsing — Gemini often wraps JSON in ```json ```
+    let parsed = null;
+    if (aiResponse) {
+      try {
+        parsed = parseAIJson(aiResponse);
+      } catch (e) {
+        console.warn('interview-prep JSON parse failed:', e.message);
+        parsed = null;
+      }
+    }
+
     res.json({
       success: true,
       data: {
-        questions: aiResponse ? JSON.parse(aiResponse) : mockData,
-        usingAI: !!aiResponse
+        questions: parsed?.questions || mockData.questions,
+        usingAI: !!parsed
       }
     });
   } catch (error) {
@@ -331,7 +373,7 @@ router.get('/status', (req, res) => {
 });
 
 // @route   POST /api/ai/generate-images
-// @desc    Generate images from text prompts using Pollinations AI
+// @desc    Generate images from text prompts using Gemini
 // @access  Private
 router.post('/generate-images', async (req, res) => {
   try {
@@ -346,7 +388,6 @@ router.post('/generate-images', async (req, res) => {
 
     const imageCount = Math.min(Math.max(count || 1, 1), 4);
 
-    // Style mappings for Gemini
     const styleParams = {
       realistic: 'photorealistic, 4k, high detail, realistic photo',
       illustration: 'digital illustration, vibrant colors, artstation style',
@@ -359,9 +400,8 @@ router.post('/generate-images', async (req, res) => {
     const styleSuffix = styleParams[style] || styleParams.realistic;
     const enhancedPrompt = `${prompt}, ${styleSuffix}`;
 
-    // Initialize Gemini with image generation model
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         message: 'Gemini API key not configured'
       });
@@ -395,15 +435,10 @@ router.post('/generate-images', async (req, res) => {
               prompt: prompt,
               style: style
             });
-            break; // Take first image part
-          } else if (part.text) {
-            // Text part - skip, try next
-            continue;
+            break;
           }
         }
       }
-
-      // If no image generated, skip this slot
     }
 
     if (imageUrls.length === 0) {
@@ -430,27 +465,20 @@ router.post('/generate-images', async (req, res) => {
   }
 });
 
-// ElevenLabs Voice IDs - Popular voices
+// ElevenLabs Voice IDs
 const elevenLabsVoices = {
   male: {
-    professional: 'pFZP5JQG7iHVjEImzEInSJsM',    // James - Professional deep male
-    friendly: 'pqHfZKPmSAGWHJbT9MzoiWxc',       // Marcus - Friendly American
-    confident: 'VR6AewLTigWG4eqSOJ0a',            // Daniel - British professional
-    calm: 'TX3LPaxmHKxASX8yoLbQXGFY',            // Thomas - Calm sophisticated
+    professional: 'pFZP5JQG7iHVjEImzEInSJsM',
+    friendly: 'pqHfZKPmSAGWHJbT9MzoiWxc',
+    confident: 'VR6AewLTigWG4eqSOJ0a',
+    calm: 'TX3LPaxmHKxASX8yoLbQXGFY',
   },
   female: {
-    professional: 'EXAVITQu4vr4xnSDxMaL',       // Sarah - Professional female
-    friendly: 'FGY2WhTYpPnrSeqd7WKo',            // Jessica - Warm friendly
-    confident: 'TX3LPaxmHKxASX8yoLbQXGFY',      // Lily - Confident young
-    calm: 'FGY2WhTYpPnrSeqd7WKo',               // Annie - Calm soothing
+    professional: 'EXAVITQu4vr4xnSDxMaL',
+    friendly: 'FGY2WhTYpPnrSeqd7WKo',
+    confident: 'TX3LPaxmHKxASX8yoLbQXGFY',
+    calm: 'FGY2WhTYpPnrSeqd7WKo',
   }
-};
-
-// Speed mappings for ElevenLabs
-const speedMap = {
-  slow: 0.7,
-  normal: 1.0,
-  fast: 1.3
 };
 
 // @route   POST /api/ai/voice-over
@@ -460,17 +488,10 @@ router.post('/voice-over', async (req, res) => {
   try {
     const { text, voiceType, tone, speed } = req.body;
 
-    if (!text) {
+    if (!text || !text.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Text is required'
-      });
-    }
-
-    if (!text.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Text cannot be empty'
       });
     }
 
@@ -481,11 +502,9 @@ router.post('/voice-over', async (req, res) => {
       });
     }
 
-    // Check if ElevenLabs is configured
     const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
 
     if (!elevenLabsKey || elevenLabsKey === 'your_elevenlabs_api_key_here') {
-      // Return Web Speech API configuration
       return res.json({
         success: true,
         data: {
@@ -503,10 +522,8 @@ router.post('/voice-over', async (req, res) => {
       });
     }
 
-    // Get voice ID
     const voiceId = elevenLabsVoices[voiceType]?.[tone] || elevenLabsVoices.male.professional;
 
-    // Generate audio with ElevenLabs
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -531,7 +548,6 @@ router.post('/voice-over', async (req, res) => {
       throw new Error(errorData.message || 'ElevenLabs API error');
     }
 
-    // Get audio buffer
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64Audio = buffer.toString('base64');
@@ -659,24 +675,30 @@ Generate exactly 5 interview questions that:
 - Test both knowledge and interpersonal skills
 - Are appropriate for a mid-level to senior candidate
 
-Format the response as a JSON array of question objects with:
-- "text": the full question
-- "type": "${interviewType || 'behavioral'}"
-- "number": question number 1-5
-
-Return ONLY the JSON array, no other text.`;
+Return ONLY a JSON array (no markdown, no explanation) with this exact structure:
+[
+  {"text": "question 1", "type": "${interviewType || 'behavioral'}", "number": 1},
+  {"text": "question 2", "type": "${interviewType || 'behavioral'}", "number": 2},
+  {"text": "question 3", "type": "${interviewType || 'behavioral'}", "number": 3},
+  {"text": "question 4", "type": "${interviewType || 'behavioral'}", "number": 4},
+  {"text": "question 5", "type": "${interviewType || 'behavioral'}", "number": 5}
+]`;
 
     const aiResponse = await generateWithAI(prompt);
 
-    let questions;
-    try {
-      questions = aiResponse ? JSON.parse(aiResponse) : null;
-    } catch (e) {
-      questions = null;
+    // FIX: strip markdown fences before parsing — Gemini often wraps JSON in ```json ```
+    let questions = null;
+    if (aiResponse) {
+      try {
+        questions = parseAIJsonArray(aiResponse);
+      } catch (e) {
+        console.warn('interview-questions JSON parse failed:', e.message);
+        questions = null;
+      }
     }
 
-    // Use AI questions or fallback to mock
-    if (!questions || !Array.isArray(questions)) {
+    // Fallback to mock if AI parse failed
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
       const typeQuestions = mockInterviewQuestions[interviewType] || mockInterviewQuestions.behavioral;
       questions = typeQuestions.map((text, index) => ({
         number: index + 1,
@@ -723,16 +745,10 @@ Question Asked: "${question}"
 Interview Type: ${interviewType || 'behavioral'}
 Candidate's Answer: "${answer}"
 
-Evaluate this answer and provide detailed feedback in the following format:
-- Assess the quality of the answer (relevance, clarity, structure, examples)
-- Identify specific strengths
-- Suggest specific improvements
-- Give a score from 1-10 based on overall quality
-
-Respond ONLY as a JSON object with this exact structure:
+Evaluate this answer and respond ONLY with valid JSON (no markdown, no explanation) with this exact structure:
 {
   "feedback": "Overall feedback text explaining the quality of the answer and suggestions",
-  "score": number from 1-10,
+  "score": 7,
   "strengths": ["strength 1", "strength 2", "strength 3"],
   "improvements": ["improvement 1", "improvement 2", "improvement 3"]
 }
@@ -742,20 +758,22 @@ For scores:
 - 7-8: Good, relevant, but could be more specific or better structured
 - 5-6: Average, basic answer but lacks depth or examples
 - 3-4: Below average, vague or off-topic
-- 1-2: Poor, doesn't address the question
-
-Return ONLY the JSON object, no other text.`;
+- 1-2: Poor, doesn't address the question`;
 
     const aiResponse = await generateWithAI(prompt);
 
-    let analysis;
-    try {
-      analysis = aiResponse ? JSON.parse(aiResponse) : null;
-    } catch (e) {
-      analysis = null;
+    // FIX: strip markdown fences before parsing
+    let analysis = null;
+    if (aiResponse) {
+      try {
+        analysis = parseAIJson(aiResponse);
+      } catch (e) {
+        console.warn('analyze-answer JSON parse failed:', e.message);
+        analysis = null;
+      }
     }
 
-    // Use AI analysis or fallback to mock
+    // Fallback to mock if parse failed
     if (!analysis || !analysis.feedback) {
       const mockFeedbacks = [
         {
@@ -813,6 +831,14 @@ router.post('/goal-tracker', auth, async (req, res) => {
       });
     }
 
+    // FIX: guard against model being null (Gemini not configured)
+    if (!model) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI service not configured. Please add GEMINI_API_KEY to your environment.'
+      });
+    }
+
     const prompt = `
 You are an AI Job Goal Tracker. Create a structured plan for this goal: "${goal}"
 ${targetDays ? `Target: ${targetDays} days` : 'Default target: 60 days'}
@@ -838,14 +864,15 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
 }
 `.trim();
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
+    // FIX: use generateWithAI() helper instead of calling model.generateContent() directly
+    const aiResponse = await generateWithAI(prompt);
 
-    // Clean markdown code blocks if present
-    text = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+    if (!aiResponse) {
+      return res.status(500).json({ success: false, message: 'AI failed to generate a response. Please try again.' });
+    }
 
-    const plan = JSON.parse(text);
+    // FIX: use shared parseAIJson helper to strip markdown fences
+    const plan = parseAIJson(aiResponse);
 
     res.json({
       success: true,
@@ -877,6 +904,14 @@ router.post('/tailor-resume', auth, async (req, res) => {
       });
     }
 
+    // FIX: guard against model being null (Gemini not configured)
+    if (!model) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI service not configured. Please add GEMINI_API_KEY to your environment.'
+      });
+    }
+
     const prompt = `
 You are a professional resume writer. Tailor the resume for the specific job.
 
@@ -905,14 +940,15 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
 }
 `.trim();
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
+    // FIX: use generateWithAI() helper instead of calling model.generateContent() directly
+    const aiResponse = await generateWithAI(prompt);
 
-    // Clean markdown code blocks if present
-    text = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+    if (!aiResponse) {
+      return res.status(500).json({ success: false, message: 'AI failed to generate a response. Please try again.' });
+    }
 
-    const tailored = JSON.parse(text);
+    // FIX: use shared parseAIJson helper to strip markdown fences
+    const tailored = parseAIJson(aiResponse);
 
     res.json({
       success: true,
@@ -926,6 +962,170 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
     res.status(500).json({
       success: false,
       message: 'Error tailoring resume'
+    });
+  }
+});
+
+// ==========================================
+// AI Resume Analyze
+// FIX: Added missing resume-analyze endpoint
+// ==========================================
+router.post('/resume-analyze', auth, async (req, res) => {
+  try {
+    const { fileData, fileType } = req.body;
+
+    if (!fileData) {
+      return res.status(400).json({ success: false, message: 'No file provided' });
+    }
+    if (!['pdf', 'docx'].includes(fileType)) {
+      return res.status(400).json({ success: false, message: 'Unsupported file format. Use PDF or DOCX.' });
+    }
+
+    const MAX_FILE_SIZE = 3 * 1024 * 1024;
+    const MAX_TEXT_CHARS = 13000;
+    const MIN_TEXT_CHARS = 50;
+
+    let buffer;
+    try {
+      buffer = Buffer.from(fileData, 'base64');
+    } catch {
+      return res.status(400).json({ success: false, message: 'Invalid file data' });
+    }
+
+    if (buffer.length > MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, message: 'File too large. Maximum 3MB.' });
+    }
+    if (buffer.length < 100) {
+      return res.status(400).json({ success: false, message: 'File appears empty or corrupted' });
+    }
+
+    // ── Text extraction ──────────────────────────────────────────────
+    let extraction = null;
+
+    if (fileType === 'docx') {
+      try {
+        const mammoth = require('mammoth');
+        const result = await mammoth.extractRawText({ buffer });
+        extraction = { method: 'mammoth', text: result.value };
+      } catch (e) {
+        console.warn('[Resume] mammoth failed:', e.message);
+      }
+    }
+
+    if (fileType === 'pdf') {
+      // Method 1: pdf-parse
+      // FIX: { max: 0 } skips internal test-file read that crashes in serverless
+      try {
+        const pdfParse = require('pdf-parse');
+        const data = await pdfParse(buffer, { max: 0 });
+        if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+          extraction = { method: 'pdf-parse', text: data.text };
+        }
+      } catch (e) {
+        console.warn('[Resume] pdf-parse failed:', e.message);
+      }
+
+      // Method 2: pdfjs-dist
+      // FIX: workerSrc = false disables browser worker — required for Node.js
+      if (!extraction) {
+        try {
+          const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+          pdfjs.GlobalWorkerOptions.workerSrc = false;
+
+          const doc = await pdfjs.getDocument({
+            data: new Uint8Array(buffer),
+            useWorkerFetch: false,
+            isEvalSupported: false,
+            useSystemFonts: true,
+          }).promise;
+
+          let pageTexts = '';
+          for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
+          }
+          if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
+            extraction = { method: 'pdfjs-dist', text: pageTexts };
+          }
+        } catch (e) {
+          console.warn('[Resume] pdfjs-dist failed:', e.message);
+        }
+      }
+    }
+
+    if (!extraction || extraction.text.trim().length < MIN_TEXT_CHARS) {
+      return res.status(400).json({
+        success: false,
+        message: 'Could not extract text from this PDF. Please ensure your resume is a text-based PDF (exported from Word or Google Docs), not a scanned image.',
+      });
+    }
+
+    let resumeText = extraction.text.trim();
+    if (resumeText.length > MAX_TEXT_CHARS) resumeText = resumeText.slice(0, MAX_TEXT_CHARS);
+
+    if (!model) {
+      return res.status(503).json({ success: false, message: 'AI service not configured. Please add GEMINI_API_KEY to your environment.' });
+    }
+
+    const prompt = `You are an expert ATS resume analyst. Analyze the resume and score it realistically.
+
+RESUME TEXT:
+${resumeText}
+
+Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
+{
+  "score": number between 0 and 100,
+  "summary": "2-3 sentence overall assessment",
+  "keywordsFound": ["keyword 1", "keyword 2", "keyword 3"],
+  "keywordsMissing": ["missing keyword 1", "missing keyword 2", "missing keyword 3"],
+  "improvements": [
+    {"text": "specific improvement", "priority": "high", "section": "section name"},
+    {"text": "specific improvement", "priority": "medium", "section": "section name"},
+    {"text": "specific improvement", "priority": "low", "section": "section name"}
+  ],
+  "sectionScores": {
+    "contact": number,
+    "summary": number,
+    "experience": number,
+    "education": number,
+    "skills": number,
+    "formatting": number
+  },
+  "atsTips": ["tip 1", "tip 2", "tip 3"]
+}`;
+
+    const aiResponse = await generateWithAI(prompt);
+
+    if (!aiResponse) {
+      return res.status(500).json({ success: false, message: 'AI failed to analyze the resume. Please try again.' });
+    }
+
+    let analysis;
+    try {
+      analysis = parseAIJson(aiResponse);
+    } catch (e) {
+      console.error('[Resume] JSON parse failed:', e.message);
+      return res.status(500).json({ success: false, message: 'AI returned an invalid response. Please try again.' });
+    }
+
+    if (typeof analysis.score !== 'number' || analysis.score < 0 || analysis.score > 100) {
+      return res.status(500).json({ success: false, message: 'AI returned an invalid score. Please try again.' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        analysis,
+        extractionMethod: extraction.method,
+        resumeTextLength: resumeText.length,
+      }
+    });
+  } catch (error) {
+    console.error('Resume analyze error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error analyzing resume'
     });
   }
 });
