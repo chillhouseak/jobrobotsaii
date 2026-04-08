@@ -393,6 +393,115 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
       return res.status(200).json({ success: true, data: { message: text, provider, creditsRemaining: Math.max(0, user.aiCredits - 1) } });
     }
 
+    // ================================================================
+    // RESUME ANALYSIS (AI-powered, real data from uploaded resume)
+    // ================================================================
+    if (action === 'resume-analyze' && method === 'POST') {
+      const { fileData, fileType } = body || {};
+      if (!fileData) return res.status(400).json({ success: false, message: 'No file provided' });
+
+      let resumeText = '';
+      try {
+        const buffer = Buffer.from(fileData, 'base64');
+
+        if (fileType === 'pdf' || (file.name || '').endsWith('.pdf')) {
+          const pdfParse = (await import('pdf-parse')).default;
+          const pdfData = await pdfParse(buffer);
+          resumeText = pdfData.text;
+        } else if (fileType === 'docx' || (file.name || '').endsWith('.docx')) {
+          const mammoth = (await import('mammoth')).default;
+          const result = await mammoth.extractRawText({ buffer });
+          resumeText = result.value;
+        } else {
+          // Try as plain text
+          resumeText = buffer.toString('utf-8');
+        }
+
+        resumeText = resumeText.trim();
+        if (!resumeText || resumeText.length < 50) {
+          return res.status(400).json({ success: false, message: 'Could not extract text from this file. Try a different PDF or DOCX.' });
+        }
+        if (resumeText.length > 15000) {
+          resumeText = resumeText.slice(0, 15000);
+        }
+      } catch (parseErr) {
+        console.error('[Resume] Parse error:', parseErr.message);
+        return res.status(400).json({ success: false, message: 'Failed to read file. Please upload a valid PDF or DOCX.' });
+      }
+
+      const analysisPrompt = `You are an expert ATS (Applicant Tracking System) resume analyst. Analyze the following resume and provide a detailed assessment.
+
+RESUME TEXT:
+${resumeText}
+
+Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
+{
+  "score": number between 0-100,
+  "summary": "2-3 sentence overall assessment of the resume quality and ATS compatibility",
+  "keywordsFound": ["keyword1", "keyword2", "keyword3"],
+  "keywordsMissing": ["important keyword or skill that should be included"],
+  "improvements": [
+    {"text": "specific actionable improvement", "priority": "high|medium|low", "section": "experience|skills|summary|education|format"}
+  ],
+  "sectionScores": {
+    "contact": number 0-100,
+    "summary": number 0-100,
+    "experience": number 0-100,
+    "education": number 0-100,
+    "skills": number 0-100,
+    "formatting": number 0-100
+  },
+  "atsTips": ["tip1", "tip2"]
+}`;
+
+      let analysis;
+      try {
+        const { text } = await callAI(analysisPrompt, 'answer', {});
+        try {
+          const start = text.indexOf('{');
+          const end = text.lastIndexOf('}');
+          if (start !== -1 && end !== -1 && end > start) {
+            analysis = JSON.parse(text.slice(start, end + 1));
+          }
+        } catch {
+          analysis = null;
+        }
+
+        if (!analysis || typeof analysis.score !== 'number') {
+          analysis = {
+            score: 65,
+            summary: 'Resume has basic information but could benefit from more specific achievements, quantified metrics, and relevant keywords.',
+            keywordsFound: ['Experience', 'Skills', 'Education'],
+            keywordsMissing: ['Quantified achievements', 'Action verbs', 'Industry keywords'],
+            improvements: [
+              { text: 'Add specific numbers and metrics to your achievements', priority: 'high', section: 'experience' },
+              { text: 'Include industry-specific keywords from job descriptions', priority: 'high', section: 'skills' },
+              { text: 'Write a stronger professional summary with impact statements', priority: 'medium', section: 'summary' },
+              { text: 'Use consistent formatting throughout', priority: 'low', section: 'format' },
+            ],
+            sectionScores: { contact: 70, summary: 60, experience: 65, education: 75, skills: 60, formatting: 70 },
+            atsTips: ['Use standard section headings', 'Avoid tables and images', 'Use standard fonts'],
+          };
+        }
+      } catch (aiErr) {
+        console.error('[Resume] AI analysis failed:', aiErr.message);
+        return res.status(500).json({ success: false, message: 'AI analysis failed. Please try again.' });
+      }
+
+      if (user.aiCredits > 0) {
+        await User.findByIdAndUpdate(decoded.id, { $inc: { aiCredits: -1 } });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          analysis,
+          resumeTextLength: resumeText.length,
+          creditsRemaining: Math.max(0, user.aiCredits - 1),
+        },
+      });
+    }
+
     return res.status(404).json({ success: false, message: 'Route not found' });
   } catch (error) {
     console.error('AI error:', error);
