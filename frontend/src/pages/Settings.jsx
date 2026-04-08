@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Palette, Bell, Shield, CreditCard, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Palette, Bell, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import Layout from '../components/Layout';
@@ -26,11 +26,9 @@ const Settings = () => {
     bio: '',
   });
 
-  // Fetch latest user data — wait for auth to be ready
   useEffect(() => {
-    if (!user) return; // Wait for auth to load
+    if (!user) return;
 
-    // Pre-fill from localStorage immediately
     setProfileData({
       name: user.name || '',
       email: user.email || '',
@@ -44,7 +42,6 @@ const Settings = () => {
     });
     setIsLoading(false);
 
-    // Also refresh from server
     const fetchUser = async () => {
       try {
         const response = await apiService.getMe();
@@ -94,11 +91,9 @@ const Settings = () => {
   };
 
   const tabs = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'profile',       label: 'Profile',       icon: User },
+    { id: 'appearance',    label: 'Appearance',     icon: Palette },
+    { id: 'notifications', label: 'Notifications',  icon: Bell },
   ];
 
   const inputClass = `w-full px-4 py-3 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 ${
@@ -325,52 +320,20 @@ const Settings = () => {
                 <h2 className="text-lg font-semibold text-white mb-6">Notification Preferences</h2>
                 <div className="space-y-4">
                   {[
-                    { key: 'email', label: 'Email Notifications', desc: 'Receive updates about your applications' },
-                    { key: 'reminders', label: 'Reminders', desc: 'Get reminded about follow-ups and interviews' },
-                    { key: 'marketing', label: 'Marketing', desc: 'Tips, tricks, and product updates' },
+                    { key: 'email',     label: 'Email Notifications', desc: 'Receive updates about your applications' },
+                    { key: 'reminders', label: 'Reminders',           desc: 'Get reminded about follow-ups and interviews' },
+                    { key: 'marketing', label: 'Marketing',           desc: 'Tips, tricks, and product updates' },
                   ].map((item) => (
                     <div key={item.key} className="flex items-center justify-between p-4 rounded-xl bg-white/5">
                       <div>
                         <p className="text-white font-medium">{item.label}</p>
                         <p className="text-sm text-gray-400">{item.desc}</p>
                       </div>
-                      <div className={`w-12 h-6 rounded-full bg-primary relative cursor-pointer transition-colors`}>
+                      <div className="w-12 h-6 rounded-full bg-primary relative cursor-pointer transition-colors">
                         <div className="w-5 h-5 rounded-full bg-white shadow absolute top-0.5 right-0.5 translate-x-0" />
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* Security Tab */}
-            {activeTab === 'security' && (
-              <div className={`p-6 rounded-2xl ${cardClass}`}>
-                <h2 className="text-lg font-semibold text-white mb-6">Security</h2>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-white/5">
-                    <p className="text-white font-medium mb-1">Password</p>
-                    <p className="text-sm text-gray-400 mb-3">Last changed: Never</p>
-                    <button className="text-sm text-primary-light hover:text-primary">Change password</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Billing Tab */}
-            {activeTab === 'billing' && (
-              <div className={`p-6 rounded-2xl ${cardClass}`}>
-                <h2 className="text-lg font-semibold text-white mb-6">Subscription</h2>
-                <div className="p-4 rounded-xl bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-white font-medium mb-1">{user?.plan === 'free' ? 'Free Plan' : user?.plan?.charAt(0).toUpperCase() + user?.plan?.slice(1) + ' Plan'}</p>
-                      <p className="text-sm text-gray-400">{user?.aiCredits || 10} AI credits per month</p>
-                    </div>
-                    <button className="gradient-btn px-4 py-2 rounded-lg text-white text-sm font-medium">
-                      Upgrade
-                    </button>
-                  </div>
                 </div>
               </div>
             )}
