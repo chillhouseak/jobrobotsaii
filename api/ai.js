@@ -46,7 +46,8 @@ const callHuggingFace = async (prompt) => {
 
 const callGemini = async (prompt) => {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') throw new Error('GEMINI_NOT_CONFIGURED');
-  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  // FIX: Use dynamic import for ESM compatibility in serverless
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const result = await model.generateContent(prompt);
@@ -394,66 +395,80 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
     }
 
     // ================================================================
-    // RESUME ANALYSIS
+    // RESUME ANALYSIS  — FIXED
     // ================================================================
     const MAX_FILE_SIZE = 3 * 1024 * 1024;
     const MAX_TEXT_CHARS = 13000;
     const MIN_TEXT_CHARS = 50;
 
-   const extractResumeText = async (buffer, fileType) => {
-  if (fileType === 'docx') {
-    const mammoth = (await import('mammoth')).default;
-    const result = await mammoth.extractRawText({ buffer });
-    return { method: 'mammoth', text: result.value };
-  }
+    const extractResumeText = async (buffer, fileType) => {
+      // ── DOCX ──────────────────────────────────────────────────────
+      if (fileType === 'docx') {
+        const mammoth = (await import('mammoth')).default;
+        const result = await mammoth.extractRawText({ buffer });
+        return { method: 'mammoth', text: result.value };
+      }
 
-  if (fileType === 'pdf') {
+      // ── PDF ───────────────────────────────────────────────────────
+      if (fileType === 'pdf') {
 
-    // Method 1: pdf-parse — guard against serverless ENOENT bug
-    try {
-      // Suppress the test-file read that crashes in serverless
-      const pdfParse = await import('pdf-parse').then(m => m.default || m).catch(() => null);
-      if (pdfParse) {
-        const data = await pdfParse(buffer, { max: 0 }); // max:0 skips test file
-        if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
-          return { method: 'pdf-parse', text: data.text };
+        // Method 1: pdf-parse
+        // FIX: Pass { max: 0 } to skip the internal test-file read that
+        //      crashes in Vercel/serverless with ENOENT.
+        try {
+          const pdfParse = await import('pdf-parse').then(m => m.default || m).catch(() => null);
+          if (pdfParse) {
+            const data = await pdfParse(buffer, { max: 0 });
+            if (data?.text?.trim()?.length >= MIN_TEXT_CHARS) {
+              return { method: 'pdf-parse', text: data.text };
+            }
+          }
+        } catch (e) {
+          console.warn('[Resume] pdf-parse failed:', e.message);
         }
+
+        // Method 2: pdfjs-dist (server-side safe)
+        // FIX: Set workerSrc = false — the CDN URL only works in browsers.
+        //      In Node.js/serverless we must disable the worker entirely.
+        try {
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+          // ✅ This is the critical fix — disables browser worker for Node.js
+          pdfjs.GlobalWorkerOptions.workerSrc = false;
+
+          const doc = await pdfjs.getDocument({
+            data: new Uint8Array(buffer),
+            useWorkerFetch: false,    // don't try to fetch the worker
+            isEvalSupported: false,   // safer in serverless
+            useSystemFonts: true,     // avoids font-fetch errors
+          }).promise;
+
+          let pageTexts = '';
+          for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
+          }
+
+          if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
+            return { method: 'pdfjs-dist', text: pageTexts };
+          }
+        } catch (e) {
+          console.warn('[Resume] pdfjs-dist failed:', e.message);
+        }
+
+        // NOTE: Tesseract OCR (Method 3) was removed.
+        // It required a real canvas implementation (the `canvas` npm package)
+        // which is a native Node module that doesn't work in Vercel serverless.
+        // The mock canvas approach wrote blank pixels so OCR always returned "".
+        // If you need scanned PDF support in future, install the `canvas` package
+        // and use it properly: https://www.npmjs.com/package/canvas
+
+        return null;
       }
-    } catch (e) {
-      console.warn('[Resume] pdf-parse failed:', e.message);
-    }
 
-    // Method 2: pdfjs-dist — NO worker (server-side safe)
-    try {
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      // ✅ Disable worker — required for Node.js/serverless environments
-      pdfjs.GlobalWorkerOptions.workerSrc = false;
-
-      const doc = await pdfjs.getDocument({
-        data: new Uint8Array(buffer),
-        useWorkerFetch: false,
-        isEvalSupported: false,
-        useSystemFonts: true,
-      }).promise;
-
-      let pageTexts = '';
-      for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        pageTexts += content.items.map(item => item.str || '').join(' ') + '\n';
-      }
-      if (pageTexts.trim().length >= MIN_TEXT_CHARS) {
-        return { method: 'pdfjs-dist', text: pageTexts };
-      }
-    } catch (e) {
-      console.warn('[Resume] pdfjs-dist failed:', e.message);
-    }
-
-    return null;
-  }
-
-  return null;
-};
+      return null;
+    };
 
     if (action === 'resume-analyze' && method === 'POST') {
       const { fileData, fileType } = body || {};
@@ -488,7 +503,7 @@ Respond ONLY with valid JSON in this exact format, no markdown or explanation:
       if (!extraction || extraction.text.trim().length < MIN_TEXT_CHARS) {
         return res.status(400).json({
           success: false,
-          message: 'Could not extract enough text. This may be a scanned image PDF — try a text-based resume instead.',
+          message: 'Could not extract text from this PDF. Please make sure your resume was saved as a text-based PDF (exported from Word, Google Docs, etc.) rather than a scanned image.',
         });
       }
 
@@ -530,7 +545,6 @@ Analyze carefully and return ONLY valid JSON with this exact structure (no markd
       try {
         const { text: rawText } = await callAI(prompt, 'answer', {});
 
-        // Safe JSON parsing — find first { and last }
         let parsed = null;
         try {
           const start = rawText.indexOf('{');
