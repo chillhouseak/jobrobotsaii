@@ -14,7 +14,11 @@ const authMiddleware = async (req) => {
 
 const getAction = (req) => {
   const url = req.url.split('?')[0];
-  return url.replace(/^\//, '') || null;
+  // Remove leading slash then check: empty → list/create, has content → specific action
+  const path = url.replace(/^\//, '');
+  if (!path) return null;           // /applications → list/create
+  if (path === 'applications') return null;  // also treat /applications (no slash) as list/create
+  return path;                      // /applications/search → 'search', /applications/:id → ':id'
 };
 
 const corsHeaders = {

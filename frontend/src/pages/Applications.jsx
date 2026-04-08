@@ -21,7 +21,7 @@ const Applications = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
-    company: '', role: '', link: '', status: 'saved', appliedDate: '', salary: '', location: '', notes: ''
+    company: '', role: '', url: '', status: 'saved', appliedDate: '', salary: '', location: '', notes: ''
   });
 
   // Load applications from backend on mount
@@ -49,7 +49,7 @@ const Applications = () => {
       setFormData({
         company: app.company || '',
         role: app.role || '',
-        link: app.link || app.url || '',
+        url: app.url || app.link || '',
         status: app.status || 'saved',
         appliedDate: app.appliedDate ? app.appliedDate.split('T')[0] : '',
         salary: app.salary || '',
@@ -58,7 +58,7 @@ const Applications = () => {
       });
       setEditingApp(app);
     } else {
-      setFormData({ company: '', role: '', link: '', status: 'saved', appliedDate: '', salary: '', location: '', notes: '' });
+      setFormData({ company: '', role: '', url: '', status: 'saved', appliedDate: '', salary: '', location: '', notes: '' });
       setEditingApp(null);
     }
     setShowModal(true);
@@ -276,8 +276,8 @@ const Applications = () => {
                 <label className="block text-sm font-medium text-gray-300 mb-1.5">Job Link</label>
                 <input
                   type="url"
-                  value={formData.link}
-                  onChange={(e) => setFormData({...formData, link: e.target.value})}
+                  value={formData.url}
+                  onChange={(e) => setFormData({...formData, url: e.target.value})}
                   className="input-field w-full px-4 py-2.5 rounded-xl text-white text-sm"
                   placeholder="https://..."
                 />
