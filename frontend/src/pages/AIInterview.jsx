@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Play, Square, Mic, MicOff, Send, Volume2, ChevronRight, Briefcase, Brain, MessageSquare, Star, Clock, CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Play, Square, Send, Volume2, ChevronRight, Briefcase, Brain, MessageSquare, Star, CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
 
@@ -12,7 +12,6 @@ const AIInterview = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [userAnswer, setUserAnswer] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -21,9 +20,6 @@ const AIInterview = () => {
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
 
   const audioRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const recognitionRef = useRef(null);
   const speechSynthesisRef = useRef(window.speechSynthesis);
   const subtitleRef = useRef(null);
 
@@ -139,7 +135,6 @@ const AIInterview = () => {
         audio.onplay = () => setIsSpeaking(true);
         audio.onended = () => {
           setIsSpeaking(false);
-          setIsRecording(true);
         };
         audio.onerror = () => {
           fallbackToWebSpeech(question.text);
@@ -175,7 +170,6 @@ const AIInterview = () => {
     };
     utterance.onend = () => {
       setIsSpeaking(false);
-      setIsRecording(true);
     };
 
     speechSynthesisRef.current.speak(utterance);
@@ -197,47 +191,6 @@ const AIInterview = () => {
     }
     speechSynthesisRef.current.cancel();
     setIsSpeaking(false);
-    setIsRecording(true);
-  };
-
-  const startVoiceRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-
-      chunksRef.current = [];
-
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        // Convert to base64 for analysis
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Audio = reader.result.split(',')[1];
-          analyzeAnswer(base64Audio);
-        };
-        reader.readAsDataURL(blob);
-      };
-
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Please allow microphone access to use voice input');
-    }
-  };
-
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsProcessingAnswer(true);
-    }
   };
 
   const submitTextAnswer = async () => {
@@ -247,10 +200,10 @@ const AIInterview = () => {
     }
 
     setIsProcessingAnswer(true);
-    await analyzeAnswer(null, userAnswer);
+    await analyzeAnswer(userAnswer);
   };
 
-  const analyzeAnswer = async (audioBase64 = null, textAnswer = null) => {
+  const analyzeAnswer = async (textAnswer = null) => {
     // Safely extract question text
     const questionText = currentQuestion?.text || currentQuestion?.displayText || '';
 
@@ -272,7 +225,7 @@ const AIInterview = () => {
 
         const historyEntry = {
           question: questionText,
-          answer: textAnswer || userAnswer || '[Voice Input]',
+          answer: textAnswer || userAnswer,
           feedback: response.data.feedback,
           score: response.data.score,
           strengths: response.data.strengths,
@@ -288,7 +241,7 @@ const AIInterview = () => {
 
         const historyEntry = {
           question: questionText,
-          answer: textAnswer || userAnswer || '[Voice Input]',
+          answer: textAnswer || userAnswer,
           feedback: mockFeedback.feedback,
           score: mockFeedback.score,
           strengths: mockFeedback.strengths,
@@ -321,7 +274,6 @@ const AIInterview = () => {
   };
 
   const generateMockFeedback = () => {
-    const score = Math.floor(Math.random() * 4) + 6; // 6-10
     const feedbacks = [
       {
         feedback: "Good answer! You demonstrated clear communication skills and provided specific examples. Try to structure your answers using the STAR method for even better impact.",
@@ -353,15 +305,12 @@ const AIInterview = () => {
     const nextIndex = currentQuestionIndex + 1;
 
     if (nextIndex >= questions.length) {
-      // Interview complete
       setCurrentQuestion(null);
-      setIsRecording(false);
       return;
     }
 
     setCurrentQuestionIndex(nextIndex);
     setCurrentQuestion(questions[nextIndex]);
-    setIsRecording(false);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
     await speakQuestion(questions[nextIndex]);
@@ -369,9 +318,6 @@ const AIInterview = () => {
 
   const endInterview = () => {
     stopSpeaking();
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-    }
     setIsStarted(false);
     setCurrentQuestion(null);
     setQuestions([]);
@@ -587,40 +533,6 @@ const AIInterview = () => {
                 }`}>
                   Your Answer
                 </h3>
-
-                {/* Voice Recording */}
-                <div className="flex items-center gap-4 mb-4">
-                  <button
-                    onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                    disabled={isProcessingAnswer}
-                    className={`px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all ${
-                      isRecording
-                        ? 'bg-red-500 text-white animate-pulse'
-                        : 'bg-gradient-to-r from-primary to-accent text-white hover:shadow-lg hover:shadow-primary/40'
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <Square className="w-4 h-4" />
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4" />
-                        Record Voice
-                      </>
-                    )}
-                  </button>
-
-                  {isRecording && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                      <span className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                        Recording...
-                      </span>
-                    </div>
-                  )}
-                </div>
 
                 {/* Text Input */}
                 <div className="relative">

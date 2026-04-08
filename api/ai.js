@@ -243,6 +243,119 @@ export default async function handler(req, res) {
   }
 
   // ================================================================
+  // INTERVIEW QUESTIONS (AI-generated)
+  // ================================================================
+  if (action === 'interview-questions' && method === 'POST') {
+    const { jobRole, interviewType } = body || {};
+    if (!jobRole) return res.status(400).json({ success: false, message: 'Job role is required' });
+
+    const type = interviewType || 'behavioral';
+    const prompt = `You are a professional interviewer preparing ${type} interview questions for a ${jobRole} position.
+
+Generate exactly 5 questions that are highly relevant to ${jobRole}.
+${type === 'technical' ? 'Make them job-specific and test problem-solving abilities.' : type === 'hr' ? 'Make them focused on culture fit and soft skills.' : 'Make them behavioral using the STAR method format.'}
+Return ONLY a valid JSON array with this exact structure, no markdown or explanation:
+[
+  {"text": "Full question here", "type": "${type}", "number": 1},
+  {"text": "Full question here", "type": "${type}", "number": 2},
+  {"text": "Full question here", "type": "${type}", "number": 3},
+  {"text": "Full question here", "type": "${type}", "number": 4},
+  {"text": "Full question here", "type": "${type}", "number": 5}
+]`;
+
+    try {
+      const { text } = await callAI(prompt, 'answer', { role: jobRole });
+      let questions;
+      try {
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+        if (start !== -1 && end !== -1) {
+          const jsonStr = text.slice(start, end + 1).replace(/[\r\n]/g, ' ');
+          questions = JSON.parse(jsonStr);
+        }
+      } catch {
+        questions = null;
+      }
+
+      if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        const fallback = {
+          behavioral: [
+            "Tell me about a time when you had to work under pressure. How did you handle it?",
+            "Describe a situation where you had to collaborate with a difficult team member. What was the outcome?",
+            "Give me an example of a goal you reached and how you achieved it.",
+            "Tell me about a time you made a mistake. How did you handle it?",
+            "Describe a situation where you had to learn something new quickly.",
+          ],
+          technical: [
+            "Explain the difference between REST and GraphQL APIs. When would you choose one over the other?",
+            "How would you optimize a slow-performing database query?",
+            "Describe your experience with version control and branching strategies.",
+            "What design patterns have you used in your projects?",
+            "How do you approach debugging a production issue?",
+          ],
+          hr: [
+            "Why are you interested in working for our company?",
+            "Where do you see yourself in five years?",
+            "What are your greatest strengths and weaknesses?",
+            "How do you handle feedback and criticism?",
+            "Why should we hire you over other candidates?",
+          ],
+        };
+        questions = (fallback[type] || fallback.behavioral).map((text, i) => ({ text, type, number: i + 1 }));
+      }
+
+      return res.status(200).json({ success: true, data: { questions, jobRole, interviewType: type } });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || 'Failed to generate questions' });
+    }
+  }
+
+  // ================================================================
+  // ANALYZE ANSWER (AI feedback)
+  // ================================================================
+  if (action === 'analyze-answer' && method === 'POST') {
+    const { question, answer, interviewType } = body || {};
+    if (!question) return res.status(400).json({ success: false, message: 'Question is required' });
+    if (!answer) return res.status(400).json({ success: false, message: 'Answer is required' });
+
+    const prompt = `You are an expert interview coach. Analyze this interview answer and provide feedback.
+
+Interview Type: ${interviewType || 'behavioral'}
+Question: ${question}
+Answer: ${answer}
+
+Respond ONLY with valid JSON in this exact format, no markdown or explanation:
+{
+  "feedback": "2-3 sentence constructive feedback on the answer quality, relevance, and delivery",
+  "score": number between 1-10,
+  "strengths": ["strength 1", "strength 2"],
+  "improvements": ["area to improve 1", "area to improve 2"]
+}`;
+
+    try {
+      const { text } = await callAI(prompt, 'answer', { role: interviewType });
+      let result;
+      try {
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1) {
+          result = JSON.parse(text.slice(start, end + 1));
+        }
+      } catch {
+        result = null;
+      }
+
+      if (!result) {
+        result = { feedback: "Good attempt. Consider adding more specific examples and quantifiable results.", score: 7, strengths: ["Clear communication", "Relevant experience"], improvements: ["Add metrics", "Use STAR method"] };
+      }
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || 'Failed to analyze answer' });
+    }
+  }
+
+  // ================================================================
   // PROTECTED ROUTES
   // ================================================================
   try {
