@@ -8,7 +8,6 @@ import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
 import AITools from './pages/AITools';
 import Analytics from './pages/Analytics';
-import Resume from './pages/Resume';
 import Library from './pages/Library';
 import Settings from './pages/Settings';
 import VoiceOver from './pages/VoiceOver';
@@ -115,14 +114,6 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Analytics />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/resume"
-              element={
-                <ProtectedRoute>
-                  <Resume />
                 </ProtectedRoute>
               }
             />

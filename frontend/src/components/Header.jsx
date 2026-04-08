@@ -13,7 +13,6 @@ const Header = ({ onMenuClick, onRightSidebarClick }) => {
     '/applications': 'Applications',
     '/ai-tools': 'AI Tools',
     '/analytics': 'Analytics',
-    '/resume': 'Resume',
     '/library': 'Library',
     '/settings': 'Settings',
     '/exclusive-guide': 'Exclusive Guide',
